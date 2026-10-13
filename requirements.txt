@@ -6,5 +6,5 @@ requests>=2.31
 Pillow>=10.0
 pydub>=0.25
 numpy>=1.26
-kaggle>=1.6
+kaggle>=1.8.0
 pytest>=8.0
