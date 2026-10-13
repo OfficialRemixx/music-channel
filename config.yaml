@@ -1,0 +1,41 @@
+pipeline_enabled: true
+budget_mode: free
+dry_run: true    # P0/P1 safety: no real uploads, no real spend until explicitly flipped off
+
+niche:
+  lane: deep_focus
+  series: "Deep Focus"
+  language: en
+
+public_text:
+  ai_wording: none
+  description_disclosure_line: false
+
+cadence_ramp:
+  - { weeks: 2, long_per_week: 2, shorts_per_week: 3 }
+  - { weeks: 4, long_per_week: 3, shorts_per_week: 7 }
+
+publish_slots_utc: ["13:00", "00:00"]
+
+music:
+  provider: kaggle_acestep
+  fallback: cc_library
+  tracks_per_batch: 60
+  keep_ratio: 0.33
+  max_track_reuse: 1
+  kaggle_hours_per_week_cap: 10
+
+mix:
+  tracks: [20, 30]
+  minutes: [60, 120]
+  crossfade_s: [6, 12]
+
+approval_mode: required   # required | veto_window | off
+storage: gdrive           # gdrive | hf_dataset | kaggle_dataset
+
+weights:
+  min_videos: 5
+  min_views: 500
+  exploration_floor: 0.25
+
+upgrade_level: L0

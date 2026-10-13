@@ -1,0 +1,18 @@
+# Section 5.10/6: weekly hash-check of the policy pages this plan relies on.
+name: D policy_watch
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "0 8 * * 1"
+permissions:
+  contents: read
+concurrency:
+  group: d-policy-watch
+  cancel-in-progress: true
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: python3 -c "from policy_watch import check_for_changes; print(check_for_changes({}))"

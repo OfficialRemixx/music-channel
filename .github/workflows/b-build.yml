@@ -1,0 +1,30 @@
+# Section 6: render + upload private + publishAt, then wait at the approval
+# Environment. STUB until P2/P3/P4 are done.
+name: B build
+
+on:
+  workflow_dispatch: {}
+  # schedule: enable per cadence_ramp after P4 sign-off
+
+permissions:
+  contents: read
+
+concurrency:
+  group: b-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360 # 6h job limit (Section 6)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: echo "STUB -- mix.py/visuals.py are P0 scaffolds only. See docs/RUNBOOK.md Phase P2."
+
+  approval-gate:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production # Section 5.8: requires a human reviewer set up on this Environment
+    timeout-minutes: 60
+    steps:
+      - run: echo "If you see this, the Environment reviewer approved. Upload step goes in P3/P4."

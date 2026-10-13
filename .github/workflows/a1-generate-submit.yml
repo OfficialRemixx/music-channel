@@ -1,0 +1,32 @@
+# Section 6 / 5.2: Phase 1 of two-phase generation. Pushes a Kaggle notebook
+# and returns immediately -- never holds a runner waiting on the GPU job.
+# STUB: raises NotImplementedError via generate/kaggle_acestep.py until
+# Section 9 step 3 (Kaggle account) is done and kernel-metadata.json exists.
+# Not scheduled yet on purpose -- enable the `schedule:` trigger after P1.
+name: A1 generate-submit
+
+on:
+  workflow_dispatch: {}
+  # schedule:
+  #   - cron: "0 6 * * 1,4"   # ~2x/week, enable after P1 sign-off
+
+permissions:
+  contents: read
+
+concurrency:
+  group: a1-generate-submit
+  cancel-in-progress: false
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - env:
+          FORCE_DRY_RUN: "true" # remove once P1 is signed off and secrets exist
+        run: python -c "from common.config import load_config; from generate.kaggle_acestep import KaggleAceStepProvider; from generate.base import BatchSpec; p=KaggleAceStepProvider(load_config()); j=p.submit(BatchSpec(prompts=[], tracks_per_batch=1, batch_id='ci-smoke')); print(j)"

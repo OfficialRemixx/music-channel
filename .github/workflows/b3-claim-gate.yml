@@ -1,0 +1,19 @@
+# Section 5.7/6: checks processed videos before their publish time. Cancels
+# publishAt + alerts on rejection/claim/audit-lock. STUB until P3/P4.
+name: B3 claim-gate
+on:
+  workflow_dispatch: {}
+  # schedule:
+  #   - cron: "0 */4 * * *"   # enable after P3 sign-off
+permissions:
+  contents: read
+concurrency:
+  group: b3-claim-gate
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: echo "STUB -- see upload.check_claim_gate(), wired in P3."

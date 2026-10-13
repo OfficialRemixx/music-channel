@@ -1,0 +1,16 @@
+.env
+*.wav
+*.flac
+*.mp3
+*.mp4
+*.mov
+credentials.json
+token.json
+client_secret*.json
+state.json
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+*.log
