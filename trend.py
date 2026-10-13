@@ -9,6 +9,7 @@ search.list is capped at 20 calls/week total (shared bucket) -- this module
 must not call search.list at all; videos.list only.
 """
 from __future__ import annotations
+
 from common.config import load_config
 from common.logging_setup import get_logger
 

@@ -1,14 +1,22 @@
 """P0 smoke tests: config loads, dry_run defaults are safe, every stub module
 fails safe (rejects/no-ops) rather than silently doing something real."""
 import os
+
 os.environ["FORCE_DRY_RUN"] = "true"
 
-from common.config import load_config, is_dry_run, is_enabled
+import analytics
+import mix
+import notify
+import policy_watch
+import qc
+import seo
+import trend
+import upload
 from common import state as state_mod
+from common.config import is_dry_run, is_enabled, load_config
 from generate.base import BatchSpec
-from generate.kaggle_acestep import KaggleAceStepProvider
 from generate.cc_library import CCLibraryProvider
-import trend, qc, mix, seo, upload, analytics, policy_watch, notify
+from generate.kaggle_acestep import KaggleAceStepProvider
 
 
 def test_config_loads_and_dry_run_forced():

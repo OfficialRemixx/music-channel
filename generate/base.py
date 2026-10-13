@@ -2,6 +2,7 @@
 cc_library, modal_acestep, lyria) implements this so upstream code never
 cares which one is active -- that's a config.yaml switch only."""
 from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any

@@ -4,6 +4,7 @@ no invented bios, no "copyright free"/"no claims" promises). P0 stub -- real
 Gemini call wired once GEMINI_API_KEY exists (Section 9 step 6) and the
 current Gemini API docs are read (rule 0.2)."""
 from __future__ import annotations
+
 from common.logging_setup import get_logger
 
 log = get_logger(__name__)
@@ -20,12 +21,17 @@ def _template_fallback(mood: str, use_case: str, series: str, vol: int, duration
         f"{use_case.title()} companion mix -- {mood} original instrumentals, no vocals.",
         "Timestamps below. New volumes every week.",
     ]
-    return {"title": title, "description": "\n".join(desc_lines), "tags": [mood, use_case, "lofi", "instrumental"]}
+    return {
+        "title": title,
+        "description": "\n".join(desc_lines),
+        "tags": [mood, use_case, "lofi", "instrumental"],
+    }
 
 
 def validate_public_text(text: dict) -> list[str]:
     """R4 enforcement gate. Returns a list of violations (empty = passes)."""
-    blob = " ".join([text.get("title", ""), text.get("description", ""), " ".join(text.get("tags", []))]).lower()
+    parts = [text.get("title", ""), text.get("description", ""), " ".join(text.get("tags", []))]
+    blob = " ".join(parts).lower()
     return [w for w in FORBIDDEN_WORDS if w in blob]
 
 

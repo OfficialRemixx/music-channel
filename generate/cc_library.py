@@ -7,8 +7,10 @@ TODO: pick and document the actual source(s) before P1 -- master-prompt rule
 0.2 forbids guessing a repo/endpoint, so no source is hard-coded here yet.
 """
 from __future__ import annotations
-from .base import MusicProvider, BatchSpec, Job
+
 from common.logging_setup import get_logger
+
+from .base import BatchSpec, Job, MusicProvider
 
 log = get_logger(__name__)
 

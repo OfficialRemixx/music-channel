@@ -3,8 +3,11 @@ failure/claim/audit-lock/policy_watch changes. Uses Telegram's HTTP Bot API
 directly (sendMessage) rather than a client library, to keep the dependency
 footprint small for CI runners."""
 from __future__ import annotations
+
 import os
+
 import requests
+
 from common.logging_setup import get_logger
 
 log = get_logger(__name__)

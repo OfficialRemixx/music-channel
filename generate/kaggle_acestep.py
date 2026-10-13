@@ -11,8 +11,10 @@ This module is intentionally a stub until those are done -- it will refuse to
 run for real (raises) but is fully wired for dry_run so CI/tests pass.
 """
 from __future__ import annotations
-from .base import MusicProvider, BatchSpec, Job
+
 from common.logging_setup import get_logger
+
+from .base import BatchSpec, Job, MusicProvider
 
 log = get_logger(__name__)
 

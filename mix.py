@@ -3,6 +3,7 @@ crossfade, respect max_track_reuse (Section 4.4b), produce chapter timestamps
 and a highlight clip per Short. P0 stub -- wired once qc.py produces real
 scored tracks."""
 from __future__ import annotations
+
 from common.config import load_config
 from common.logging_setup import get_logger
 

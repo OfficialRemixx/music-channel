@@ -17,6 +17,7 @@ contentDetails.licensedContent for the claim gate before ever flipping
 privacyStatus to public.
 """
 from __future__ import annotations
+
 import os
 from dataclasses import dataclass
 
@@ -71,8 +72,8 @@ def upload_video(video_path: str, metadata: dict, cfg: dict) -> UploadResult:
         log.info("upload.upload_video: dry_run, not calling the API. metadata=%s", metadata.get("title"))
         return UploadResult(ok=True, video_id="dryrun-video-id", reason="dry_run")
 
-    from googleapiclient.http import MediaFileUpload
     from googleapiclient.errors import HttpError
+    from googleapiclient.http import MediaFileUpload
 
     service = _get_service()
 

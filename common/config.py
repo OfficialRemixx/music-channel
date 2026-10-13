@@ -1,9 +1,11 @@
 """Central config loader. Everything in the pipeline reads config through here,
 never hard-coded niche/schedule/provider/threshold values (R-rule in master prompt)."""
 from __future__ import annotations
+
 import os
 from pathlib import Path
 from typing import Any
+
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent

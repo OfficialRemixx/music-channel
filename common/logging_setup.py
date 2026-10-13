@@ -1,6 +1,7 @@
 """Structured logging with automatic secret masking (R5 / Section 7:
 'Log masking; never echo tokens'). Import get_logger(__name__) everywhere."""
 from __future__ import annotations
+
 import logging
 import os
 import re

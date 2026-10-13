@@ -6,7 +6,9 @@ Real audio analysis (pydub/numpy/loudness) is intentionally not wired yet --
 this is the P0 scaffold. P1 fills in real checks once first tracks exist.
 """
 from __future__ import annotations
+
 from dataclasses import dataclass
+
 from common.logging_setup import get_logger
 
 log = get_logger(__name__)

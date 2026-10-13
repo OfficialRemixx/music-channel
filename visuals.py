@@ -8,6 +8,7 @@ content is served under the Pixabay Content License (free for commercial use,
 no attribution required, but we store the credit anyway for the series bible).
 """
 from __future__ import annotations
+
 import os
 import random
 import subprocess

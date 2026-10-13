@@ -4,7 +4,9 @@ the pipeline relies on stale assumptions. P0 stub -- network fetch wired in
 P5 (keeps this file dependency-light: stdlib only, no requests needed to test
 the hashing logic itself)."""
 from __future__ import annotations
+
 import hashlib
+
 from common.logging_setup import get_logger
 
 log = get_logger(__name__)

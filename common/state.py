@@ -1,6 +1,7 @@
 """Idempotent run-state. Every workflow must be safe to re-run after a crash
 without double-processing or double-uploading (Section 5.0 / 5.7)."""
 from __future__ import annotations
+
 import json
 from pathlib import Path
 from typing import Any
