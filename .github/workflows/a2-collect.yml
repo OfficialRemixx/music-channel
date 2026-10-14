@@ -1,14 +1,14 @@
 # Section 6: cheap, frequent poll for a pending Kaggle job. Exits in seconds
-# when nothing is pending. STUB until P1.
+# when nothing is pending. Real as of P1: scripts/a2_collect.py.
 name: A2 collect
 
 on:
   workflow_dispatch: {}
   # schedule:
-  #   - cron: "*/30 * * * *"   # enable after P1 sign-off
+  #   - cron: "*/30 * * * *"   # enable after a verified manual run
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: a2-collect
@@ -20,4 +20,14 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: echo "STUB -- nothing to collect yet (P1 not wired). See generate/kaggle_acestep.py"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - env:
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/a2_collect.py

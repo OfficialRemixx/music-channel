@@ -1,17 +1,16 @@
 # Section 6 / 5.2: Phase 1 of two-phase generation. Pushes a Kaggle notebook
 # and returns immediately -- never holds a runner waiting on the GPU job.
-# STUB: raises NotImplementedError via generate/kaggle_acestep.py until
-# Section 9 step 3 (Kaggle account) is done and kernel-metadata.json exists.
-# Not scheduled yet on purpose -- enable the `schedule:` trigger after P1.
+# Real as of P1: scripts/a1_submit.py. Scheduled trigger stays commented out
+# until a manual workflow_dispatch run has been verified end to end.
 name: A1 generate-submit
 
 on:
   workflow_dispatch: {}
   # schedule:
-  #   - cron: "0 6 * * 1,4"   # ~2x/week, enable after P1 sign-off
+  #   - cron: "0 6 * * 1,4"   # ~2x/week, enable after a verified manual run
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: a1-generate-submit
@@ -28,5 +27,8 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - env:
-          FORCE_DRY_RUN: "true" # remove once P1 is signed off and secrets exist
-        run: python -c "from common.config import load_config; from generate.kaggle_acestep import KaggleAceStepProvider; from generate.base import BatchSpec; p=KaggleAceStepProvider(load_config()); j=p.submit(BatchSpec(prompts=[], tracks_per_batch=1, batch_id='ci-smoke')); print(j)"
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/a1_submit.py

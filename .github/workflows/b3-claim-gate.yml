@@ -1,12 +1,13 @@
 # Section 5.7/6: checks processed videos before their publish time. Cancels
-# publishAt + alerts on rejection/claim/audit-lock. STUB until P3/P4.
+# publishAt + alerts on rejection/claim/audit-lock. Real as of P3:
+# scripts/b3_claim_gate.py.
 name: B3 claim-gate
 on:
   workflow_dispatch: {}
   # schedule:
-  #   - cron: "0 */4 * * *"   # enable after P3 sign-off
+  #   - cron: "0 */4 * * *"   # enable after a verified manual run
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: b3-claim-gate
   cancel-in-progress: true
@@ -16,4 +17,14 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: echo "STUB -- see upload.check_claim_gate(), wired in P3."
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - env:
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python scripts/b3_claim_gate.py

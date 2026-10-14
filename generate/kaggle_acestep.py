@@ -113,6 +113,32 @@ print(f"wrote {{len(manifest)}} tracks + manifest.json")
 '''
 
 
+def build_prompt_text(item: dict) -> str:
+    """Turns one trend.py prompt-matrix item ({genre, mood, bpm, key,
+    instruments, lane}) into the comma-separated tag string ACE-Step's text
+    encoder expects -- confirmed against the real
+    examples/default/input_params/*.json samples in the ACE-Step repo, whose
+    `prompt` fields are plain comma-joined tag lists, not natural-language
+    sentences."""
+    bpm_range = item.get("bpm") or [70, 90]
+    bpm_mid = (bpm_range[0] + bpm_range[-1]) // 2
+    tags = [
+        item.get("genre", ""),
+        item.get("mood", ""),
+        *item.get("instruments", []),
+        item.get("key", ""),
+        f"{bpm_mid} bpm",
+        "instrumental",
+    ]
+    return ", ".join(t for t in tags if t)
+
+
+def prompts_from_matrix(matrix: list[dict], duration_s: int = DEFAULT_TRACK_DURATION_S) -> list[dict]:
+    """trend.py's prompt matrix -> the [{prompt, duration}] shape
+    BatchSpec.prompts / the Kaggle kernel template expect."""
+    return [{"prompt": build_prompt_text(item), "duration": duration_s} for item in matrix]
+
+
 def _slugify(value: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-")
     return (slug or "batch")[:50]
