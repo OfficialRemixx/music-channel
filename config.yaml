@@ -1,6 +1,6 @@
 pipeline_enabled: true
 budget_mode: free
-dry_run: true    # P0/P1 safety: no real uploads, no real spend until explicitly flipped off
+dry_run: false   # flipped on 2026-10-14: real Kaggle generation + real private YouTube uploads now live
 
 niche:
   lane: deep_focus
