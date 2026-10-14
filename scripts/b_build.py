@@ -1,12 +1,11 @@
 """B entrypoint (.github/workflows/b-build.yml), runs after the workflow's
 human approval Environment gate: builds a long mix from the QC-accepted track
-pool, renders the video, generates metadata, and uploads it privately.
+pool, renders the video, generates metadata, and uploads it privately with a
+scheduled publishAt at the next slot from config.yaml's publish_slots_utc.
 
-Known simplification (flagged, not hidden): publish_at scheduling against
-config.yaml's publish_slots_utc isn't wired yet, so every upload lands as
-private with no scheduled publish time -- you publish it manually from
-YouTube Studio once you're happy with it, same as the audit-lock period
-described in docs/RUNBOOK.md Section 9 step 5.
+Note (docs/RUNBOOK.md Section 9 step 5): until the YouTube API audit/quota
+extension passes, uploaded videos stay private regardless of what's
+requested here -- publishAt is honored only once that audit clears.
 """
 from __future__ import annotations
 
@@ -19,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import storage
 from common.config import is_enabled, load_config
 from common.logging_setup import get_logger
+from common.scheduling import next_publish_slot_utc
 from mix import build_mix
 from notify import alert_failure, send
 from seo import generate_metadata
@@ -60,6 +60,7 @@ def main() -> int:
         duration_min=duration_min,
         cfg=cfg,
     )
+    metadata["publish_at"] = next_publish_slot_utc(cfg)
 
     result = upload_video(video_path, metadata, cfg)
     if not result.ok:

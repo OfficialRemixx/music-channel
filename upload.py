@@ -31,7 +31,11 @@ SCOPES = [
 ]
 
 TOKEN_URI = "https://oauth2.googleapis.com/token"
-DEFAULT_CATEGORY_ID = "10"  # Music -- confirmed against videoCategories.list for US/region "en"
+# Fail-safe fallback only -- _get_category_id() below reads the real id from
+# videoCategories.list on every upload per this module's own R3/5.7 rule
+# (never hard-code categoryId). "10" happens to be Music in most regions,
+# but we never rely on that matching without checking.
+DEFAULT_CATEGORY_ID = "10"
 
 
 @dataclass
@@ -67,6 +71,33 @@ def _get_service():
     return build("youtube", "v3", credentials=creds, cache_discovery=False)
 
 
+def _get_category_id(service, region_code: str = "US") -> str:
+    """Reads categoryId from the API's own videoCategories.list rather than
+    hard-coding it (confirmed real endpoint: GET .../youtube/v3/videoCategories
+    ?part=snippet&regionCode=<cc>, per
+    https://developers.google.com/youtube/v3/docs/videoCategories/list).
+    Falls back to DEFAULT_CATEGORY_ID (fails safe, not silently) if the call
+    errors or no "Music" category is returned for the region."""
+    try:
+        resp = service.videoCategories().list(part="snippet", regionCode=region_code).execute()
+    except Exception:
+        log.exception(
+            "upload._get_category_id: videoCategories.list failed, falling back to %s",
+            DEFAULT_CATEGORY_ID,
+        )
+        return DEFAULT_CATEGORY_ID
+
+    for item in resp.get("items", []):
+        if item.get("snippet", {}).get("title") == "Music":
+            return item["id"]
+
+    log.warning(
+        "upload._get_category_id: no 'Music' category for region %s, falling back to %s",
+        region_code, DEFAULT_CATEGORY_ID,
+    )
+    return DEFAULT_CATEGORY_ID
+
+
 def upload_video(video_path: str, metadata: dict, cfg: dict) -> UploadResult:
     if cfg.get("dry_run", True):
         log.info("upload.upload_video: dry_run, not calling the API. metadata=%s", metadata.get("title"))
@@ -76,13 +107,14 @@ def upload_video(video_path: str, metadata: dict, cfg: dict) -> UploadResult:
     from googleapiclient.http import MediaFileUpload
 
     service = _get_service()
+    category_id = metadata.get("category_id") or _get_category_id(service)
 
     body = {
         "snippet": {
             "title": metadata["title"],
             "description": metadata["description"],
             "tags": metadata.get("tags", []),
-            "categoryId": metadata.get("category_id", DEFAULT_CATEGORY_ID),
+            "categoryId": category_id,
         },
         "status": {
             "privacyStatus": "private",

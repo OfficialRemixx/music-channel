@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy -- Deep Focus</title>
+<style>
+  body { font-family: -apple-system, system-ui, sans-serif; max-width: 680px; margin: 48px auto; padding: 0 20px; line-height: 1.65; color: #222; }
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.15rem; margin-top: 2em; }
+  a { color: #0a58ca; }
+  footer { margin-top: 3em; font-size: 0.9em; color: #666; }
+</style>
+</head>
+<body>
+<h1>Privacy Policy</h1>
+<p><em>Last updated: 2026-10-14</em></p>
+
+<p>This policy covers the "Deep Focus" YouTube channel and the automated
+pipeline (the "Service") that generates and publishes its videos. The Service
+is operated by a single individual (the "Operator") for their own YouTube
+channel. Its source code is public: <a href="https://github.com/OfficialRemixx/music-channel">github.com/OfficialRemixx/music-channel</a>.</p>
+
+<h2>What the Service does</h2>
+<p>The Service automatically generates original, instrumental background-music
+videos (for focus/study/ambient use) using an open-source AI music model, and
+uploads them to the Operator's own YouTube channel through the YouTube Data
+API. Every video the Service uploads is marked as containing synthetic
+("AI-generated") media, per YouTube's content disclosure requirements.</p>
+
+<h2>Whose data this covers</h2>
+<p>The Service does not operate on behalf of, or collect data from, anyone
+other than the Operator. It has no sign-up flow, no user accounts, no
+comment system, and no analytics tracking of channel viewers beyond what
+YouTube itself already provides to any channel owner through YouTube
+Analytics. If you are watching a "Deep Focus" video, your use of YouTube is
+covered by <a href="https://policies.google.com/privacy">Google's Privacy
+Policy</a>, not by this one.</p>
+
+<h2>Google user data accessed by the Service</h2>
+<p>The Service uses Google OAuth to access the Operator's own YouTube channel,
+under the <code>youtube.upload</code> and <code>youtube.readonly</code>
+scopes, solely to:</p>
+<ul>
+  <li>Upload videos the Service generates to the Operator's channel;</li>
+  <li>Read back the status of those uploads (processing status, content ID
+      claims, rejection reasons) to confirm each upload succeeded cleanly
+      before it is ever made public;</li>
+  <li>Look up YouTube's public video category list so uploads are tagged
+      correctly.</li>
+</ul>
+<p>No data read from the Operator's YouTube account is shared with any third
+party, sold, or used for advertising. The Service's use and transfer of
+information received from Google APIs adheres to the
+<a href="https://developers.google.com/terms/api-services-user-data-policy">Google
+API Services User Data Policy</a>, including the Limited Use requirements.</p>
+
+<h2>Other services the Service talks to</h2>
+<p>None of the following receive any personal data about anyone other than
+the Operator's own API credentials, which the Operator controls directly:</p>
+<ul>
+  <li><strong>Kaggle</strong> -- runs the AI music-generation model on a GPU
+      notebook under the Operator's own Kaggle account.</li>
+  <li><strong>Pixabay</strong> -- supplies royalty-free cover images for the
+      videos, under the Pixabay Content License.</li>
+  <li><strong>A private Telegram bot</strong> -- sends the Operator status
+      notifications about the pipeline's own runs (e.g. "upload succeeded").
+      No viewer or channel-audience data is ever sent here.</li>
+</ul>
+
+<h2>Data retention</h2>
+<p>The pipeline's working state (which tracks have been generated, which
+videos have been uploaded) is stored in the Service's own public GitHub
+repository, not in any database of personal information, since none is
+collected.</p>
+
+<h2>Contact</h2>
+<p>Questions about this policy can be raised as an issue on the
+<a href="https://github.com/OfficialRemixx/music-channel/issues">GitHub
+repository</a>.</p>
+
+<footer><a href="index.html">&larr; Back</a></footer>
+</body>
+</html>
