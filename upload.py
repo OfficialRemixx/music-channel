@@ -18,19 +18,13 @@ privacyStatus to public.
 """
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 
 from common.logging_setup import get_logger
+from common.youtube_client import get_service
 
 log = get_logger(__name__)
 
-SCOPES = [
-    "https://www.googleapis.com/auth/youtube.upload",
-    "https://www.googleapis.com/auth/youtube.readonly",
-]
-
-TOKEN_URI = "https://oauth2.googleapis.com/token"
 # Fail-safe fallback only -- _get_category_id() below reads the real id from
 # videoCategories.list on every upload per this module's own R3/5.7 rule
 # (never hard-code categoryId). "10" happens to be Music in most regions,
@@ -43,32 +37,6 @@ class UploadResult:
     ok: bool
     video_id: str | None
     reason: str
-
-
-def _get_credentials():
-    from google.oauth2.credentials import Credentials
-
-    client_id = os.environ["YT_CLIENT_ID"]
-    client_secret = os.environ["YT_CLIENT_SECRET"]
-    refresh_token = os.environ["YT_REFRESH_TOKEN"]
-    creds = Credentials(
-        token=None,
-        refresh_token=refresh_token,
-        token_uri=TOKEN_URI,
-        client_id=client_id,
-        client_secret=client_secret,
-        scopes=SCOPES,
-    )
-    from google.auth.transport.requests import Request
-    creds.refresh(Request())
-    return creds
-
-
-def _get_service():
-    from googleapiclient.discovery import build
-
-    creds = _get_credentials()
-    return build("youtube", "v3", credentials=creds, cache_discovery=False)
 
 
 def _get_category_id(service, region_code: str = "US") -> str:
@@ -106,7 +74,7 @@ def upload_video(video_path: str, metadata: dict, cfg: dict) -> UploadResult:
     from googleapiclient.errors import HttpError
     from googleapiclient.http import MediaFileUpload
 
-    service = _get_service()
+    service = get_service()
     category_id = metadata.get("category_id") or _get_category_id(service)
 
     body = {
@@ -160,7 +128,7 @@ def check_claim_gate(video_id: str, cfg: dict) -> UploadResult:
 
     from googleapiclient.errors import HttpError
 
-    service = _get_service()
+    service = get_service()
     try:
         resp = service.videos().list(
             part="status,contentDetails", id=video_id
