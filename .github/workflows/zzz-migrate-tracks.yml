@@ -1,0 +1,25 @@
+# TEMPORARY one-off workflow (2026-10-15) -- runs scripts/migrate_tracks_to_kaggle.py
+# once to move the 2 pre-existing git-committed tracks into the new Kaggle
+# Dataset storage. Delete this file once the migration has been verified.
+name: ZZZ migrate tracks (one-off)
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - env:
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+        run: python scripts/migrate_tracks_to_kaggle.py
