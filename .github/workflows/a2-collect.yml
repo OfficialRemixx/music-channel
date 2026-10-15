@@ -1,11 +1,12 @@
 # Section 6: cheap, frequent poll for a pending Kaggle job. Exits in seconds
-# when nothing is pending. Real as of P1: scripts/a2_collect.py.
+# when nothing is pending. Real as of P1: scripts/a2_collect.py. Scheduled
+# trigger enabled 2026-10-15 after a verified real end-to-end run.
 name: A2 collect
 
 on:
   workflow_dispatch: {}
-  # schedule:
-  #   - cron: "*/30 * * * *"   # enable after a verified manual run
+  schedule:
+    - cron: "*/30 * * * *"
 
 permissions:
   contents: write
