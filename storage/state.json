@@ -1,20 +1,38 @@
 {
   "last_run": {},
-  "pending_generation_jobs": [
-    {
-      "batch_id": "deep_focus-f3911ae8",
-      "job_id": "officialremixx/mc-gen-deep-focus-f3911ae8",
-      "meta": {
-        "batch_id": "deep_focus-f3911ae8",
-        "slug": "mc-gen-deep-focus-f3911ae8"
-      },
-      "provider": "kaggle_acestep",
-      "status": "pending"
-    }
-  ],
+  "pending_generation_jobs": [],
   "quota_usage": {},
   "schema_version": 1,
-  "track_pool": [],
+  "track_pool": [
+    {
+      "bpm": 75.0,
+      "commit": "1bee4c9f5b43e30995f8d4d33b3919197ce1bd68",
+      "key": "G major",
+      "license": "Apache-2.0",
+      "loudness_dbfs": -15.8,
+      "model": "ACE-Step-v1-3.5B",
+      "path": "storage/tracks/deep_focus-f3911ae8-000.wav",
+      "prompt": "lofi, focused, soft piano, warm keys, vinyl texture, C major, 80 bpm, instrumental",
+      "score": 1.0,
+      "seed": 1249999428,
+      "track_id": "deep_focus-f3911ae8-000",
+      "used_count": 0
+    },
+    {
+      "bpm": 84.5,
+      "commit": "1bee4c9f5b43e30995f8d4d33b3919197ce1bd68",
+      "key": "D# major",
+      "license": "Apache-2.0",
+      "loudness_dbfs": -17.35,
+      "model": "ACE-Step-v1-3.5B",
+      "path": "storage/tracks/deep_focus-f3911ae8-001.wav",
+      "prompt": "lofi, calm, rhodes, mellow bass, rain ambience, A minor, 67 bpm, instrumental",
+      "score": 0.9777,
+      "seed": 1652503283,
+      "track_id": "deep_focus-f3911ae8-001",
+      "used_count": 0
+    }
+  ],
   "uploaded_videos": [],
   "weights": {}
 }
