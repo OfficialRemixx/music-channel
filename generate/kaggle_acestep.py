@@ -185,8 +185,15 @@ class KaggleAceStepProvider(MusicProvider):
             repo=ACE_STEP_REPO,
             model_name=ACE_STEP_MODEL_NAME,
             license=ACE_STEP_LICENSE,
-            prompts_json=json.dumps(batch_spec.prompts),
-            defaults_json=json.dumps(ACE_STEP_DEFAULTS),
+            # repr(), not json.dumps(): this text is spliced into Python SOURCE
+            # CODE (kernel.py), not a JSON file. json.dumps emits lowercase
+            # true/false/null, which are not valid Python literals -- that
+            # mismatch is exactly what crashed the first real Kaggle run
+            # (NameError: name 'true' is not defined) inside ACE_STEP_DEFAULTS,
+            # which has Python bools. repr() of a plain dict/list of
+            # str/int/float/bool/None is always valid Python source.
+            prompts_json=repr(batch_spec.prompts),
+            defaults_json=repr(ACE_STEP_DEFAULTS),
             default_duration=batch_spec.extra.get("duration", DEFAULT_TRACK_DURATION_S),
         )
         (kernel_dir / "kernel.py").write_text(script, encoding="utf-8")
