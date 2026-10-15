@@ -14,6 +14,8 @@ DEFAULT_STATE: dict[str, Any] = {
     "weights": {},                   # prompt-family -> weight, see Section 4.9
     "quota_usage": {},               # bucket -> units used today
     "last_run": {},                  # workflow_name -> iso timestamp
+    "kaggle_dataset_created": False,  # has storage.py pushed the first Kaggle Datasets version yet
+    "circuit_breaker_paused": False,  # set by a2_collect.py when a batch's QC pass-rate is too low
 }
 
 

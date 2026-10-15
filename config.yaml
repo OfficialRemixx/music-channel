@@ -20,10 +20,24 @@ publish_slots_utc: ["13:00", "00:00"]
 music:
   provider: kaggle_acestep
   fallback: cc_library
-  tracks_per_batch: 60
-  keep_ratio: 0.33
+  # Wired for real as of 2026-10-15 (was dead config before -- a1_submit.py
+  # used to hardcode len(prompts)=2 from trend.py's fixed fallback matrix
+  # regardless of this number). 26 = a light oversample above mix.tracks'
+  # floor of 20, so normal QC/dedupe attrition still clears the minimum a
+  # mix needs from a single batch. Real benchmark (2026-10-15,
+  # mc-gen-deep-focus-f3911ae8, cpu_offload=True on a T4): ~4.5 min/track,
+  # so 26 tracks/batch x 2 batches/week ~= 234 min/week of the 600 min/week
+  # (10hr) budget below -- comfortable headroom for retries.
+  tracks_per_batch: 26
+  trend_share: 0.5          # fraction of a batch's prompts that get a trending word mixed in
+  fixed_share: 0.5          # fraction that stay on evergreen genre/mood/instrument combos
+  keep_ratio: 0.33          # NOT YET enforced anywhere in code -- see system-overview doc
   max_track_reuse: 1
   kaggle_hours_per_week_cap: 10
+  dedupe_similarity_max: 0.92   # cross-track chroma-fingerprint cosine similarity reject threshold (qc.py)
+
+qc:
+  pass_rate_alert_below: 0.5   # a batch's QC pass-rate below this pauses new A1 submissions (circuit breaker)
 
 mix:
   tracks: [20, 30]
@@ -31,7 +45,7 @@ mix:
   crossfade_s: [6, 12]
 
 approval_mode: required   # required | veto_window | off
-storage: gdrive           # gdrive | hf_dataset | kaggle_dataset
+storage: kaggle_dataset    # gdrive | hf_dataset | kaggle_dataset -- real as of 2026-10-15, see storage.py
 
 weights:
   min_videos: 5

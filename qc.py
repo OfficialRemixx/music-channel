@@ -11,6 +11,17 @@ Schmuckler major/minor key profiles. These are standard, explainable DSP
 techniques -- not a learned/black-box classifier -- chosen so every QC
 decision has a concrete, loggable reason (fails safe per R9: anything we
 can't confidently check is rejected, not waved through).
+
+check_track() only judges a track against itself (silence/clipping/loudness/
+etc). Cross-track near-duplicate detection (two DIFFERENT generated tracks
+sounding almost identical -- a real risk with templated prompts, and a
+demonetization/"mass-produced content" risk on YouTube) needs every OTHER
+accepted track to compare against, so it can't live inside a single-track
+function: check_track() just computes and returns a `fingerprint` (the same
+12-bin chroma vector already computed for key estimation -- no new
+dependency, still plain explainable DSP), and the caller (a2_collect.py)
+compares it against the existing track_pool's fingerprints via
+fingerprint_similarity() before accepting a track into the pool.
 """
 from __future__ import annotations
 
@@ -33,6 +44,7 @@ CLIP_SAMPLE_THRESHOLD = 0.999     # fraction of full-scale counted as clipped
 MAX_CLIPPED_RATIO = 0.0005        # fraction of samples allowed at/above that
 LOOP_WINDOW_S = 4.0
 MAX_SELF_SIMILARITY = 0.97        # near-identical repeated window -> short-loop artifact
+MAX_DEDUPE_SIMILARITY = 0.92      # cosine similarity across DIFFERENT tracks' chroma fingerprints
 
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 # Krumhansl-Schmuckler key profiles (classic cognitive-science tonal-hierarchy
@@ -50,6 +62,7 @@ class QCResult:
     key: str | None = None
     loudness_dbfs: float | None = None
     normalized_path: str | None = None
+    fingerprint: list[float] | None = None
     details: dict = field(default_factory=dict)
 
 
@@ -136,10 +149,15 @@ def _estimate_bpm(samples: np.ndarray, sr: int) -> float | None:
     return round(60.0 * frame_rate / best_lag, 1)
 
 
-def _estimate_key(samples: np.ndarray, sr: int) -> str | None:
-    """FFT-based chromagram (energy per pitch class, A440 equal temperament)
-    correlated against Krumhansl-Schmuckler major/minor profiles."""
-    n = min(len(samples), sr * 30)  # first 30s is plenty for a key estimate
+def _chroma_vector(samples: np.ndarray, sr: int) -> np.ndarray | None:
+    """FFT-based chromagram: energy per pitch class (A440 equal temperament),
+    normalized to sum to 1. Used both for key estimation (correlated against
+    the Krumhansl-Schmuckler profiles below) and, standalone, as a cheap
+    12-dim "fingerprint" for cross-track near-duplicate detection -- two
+    tracks built from very similar prompts tend to land on very similar
+    harmonic/pitch-class content even with different melodies, which is
+    exactly the "sounds like a reskin" case we want to catch."""
+    n = min(len(samples), sr * 30)  # first 30s is plenty
     if n < sr * 2:
         return None
     windowed = samples[:n] * np.hanning(n)
@@ -155,8 +173,14 @@ def _estimate_key(samples: np.ndarray, sr: int) -> str | None:
         chroma[pc] += mag
     if chroma.sum() <= 0:
         return None
-    chroma /= chroma.sum()
+    return chroma / chroma.sum()
 
+
+def _estimate_key(chroma: np.ndarray | None) -> str | None:
+    """Correlates a chroma vector against Krumhansl-Schmuckler major/minor
+    profiles (classic cognitive-science tonal-hierarchy weights)."""
+    if chroma is None:
+        return None
     best_key, best_score = None, -np.inf
     for shift in range(12):
         maj_corr = float(np.corrcoef(chroma, np.roll(KS_MAJOR, shift))[0, 1])
@@ -166,6 +190,19 @@ def _estimate_key(samples: np.ndarray, sr: int) -> str | None:
         if min_corr > best_score:
             best_score, best_key = min_corr, f"{NOTE_NAMES[shift]} minor"
     return best_key
+
+
+def fingerprint_similarity(fp_a: list[float] | None, fp_b: list[float] | None) -> float:
+    """Cosine similarity between two tracks' chroma fingerprints, in [0, 1]
+    for these non-negative vectors (1.0 = identical pitch-class distribution).
+    Returns 0.0 (never similar) if either fingerprint is missing."""
+    if not fp_a or not fp_b:
+        return 0.0
+    a, b = np.array(fp_a), np.array(fp_b)
+    na, nb = float(np.linalg.norm(a)), float(np.linalg.norm(b))
+    if na < 1e-9 or nb < 1e-9:
+        return 0.0
+    return float(np.dot(a, b) / (na * nb))
 
 
 def _check_loop_repetition(samples: np.ndarray, sr: int) -> tuple[bool, float]:
@@ -241,13 +278,16 @@ def check_track(path: str) -> QCResult:
         reasons.append(f"short_loop_repetition:{loop_similarity:.3f}")
 
     bpm = _estimate_bpm(samples, sr)
-    key = _estimate_key(samples, sr)
+    chroma = _chroma_vector(samples, sr)
+    key = _estimate_key(chroma)
+    fingerprint = chroma.tolist() if chroma is not None else None
 
     if reasons:
         # Fail safe (R9): don't bother normalizing/scoring a track we're
         # rejecting anyway.
         return QCResult(
-            accepted=False, score=0.0, reasons=reasons, bpm=bpm, key=key, details=details,
+            accepted=False, score=0.0, reasons=reasons, bpm=bpm, key=key,
+            fingerprint=fingerprint, details=details,
         )
 
     loudness_dbfs, normalized_path = _normalize_loudness(samples, path)
@@ -266,5 +306,6 @@ def check_track(path: str) -> QCResult:
         key=key,
         loudness_dbfs=round(loudness_dbfs, 2),
         normalized_path=normalized_path,
+        fingerprint=fingerprint,
         details=details,
     )

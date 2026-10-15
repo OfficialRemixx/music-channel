@@ -29,6 +29,14 @@ def main() -> int:
         return 0
 
     state = storage.load()
+    if state.get("circuit_breaker_paused"):
+        log.info(
+            "a1_submit: circuit_breaker_paused=true (a2_collect saw a batch's QC "
+            "pass-rate fall below qc.pass_rate_alert_below), not submitting a new "
+            "batch -- clear storage/state.json's circuit_breaker_paused flag to resume"
+        )
+        return 0
+
     if state["pending_generation_jobs"]:
         log.info("a1_submit: %d job(s) already pending, not submitting a new one",
                   len(state["pending_generation_jobs"]))

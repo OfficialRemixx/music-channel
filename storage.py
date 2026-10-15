@@ -1,16 +1,25 @@
-"""Storage layer (config.yaml's `storage:` key). Default implementation:
-commits `state.json` + generated track/mix files into this repo's own
-`storage/` folder, so A1/A2/B (each a separate, stateless GitHub Actions run)
-can hand data to each other without a second Google Drive OAuth consent.
-Swapping to `storage: gdrive`/`storage: hf_dataset`/`storage: kaggle_dataset`
-later means adding a sibling module behind this same load/save/store_track_file
-interface -- nothing upstream (a1/a2/b scripts) needs to change.
+"""Storage layer (config.yaml's `storage:` key, currently `kaggle_dataset`).
+`state.json` (small: prompts/jobs/track metadata/logs) still lives in this
+git repo via commit_and_push() -- but the actual audio bytes do NOT. Audio
+goes to a private Kaggle Dataset instead (see sync_tracks_to_kaggle_dataset
+and resolve_track_path below), because git never shrinks: every .wav ever
+committed stays in the repo's history forever. Confirmed live (2026-10-15):
+.git hit 17MB after just 2 committed tracks (~8.3MB each) -- that does not
+scale to hundreds of tracks/week.
+
+Kaggle Datasets versioning is a full-snapshot replace, not an additive merge
+(confirmed against the Kaggle CLI's own documented behavior) -- so every
+sync must download whatever's already in the dataset, add the new file(s),
+and re-push the whole folder as the next version, or previously-uploaded
+tracks would silently disappear from the dataset.
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -22,8 +31,12 @@ log = get_logger(__name__)
 
 STORAGE_DIR = REPO_ROOT / "storage"
 STATE_PATH = STORAGE_DIR / "state.json"
-TRACKS_DIR = STORAGE_DIR / "tracks"
 MIXES_DIR = STORAGE_DIR / "mixes"
+
+KAGGLE_DATASET_TITLE = "Music Channel Generated Tracks"
+KAGGLE_DATASET_SLUG_NAME = "music-channel-tracks"
+
+_dataset_read_cache: Path | None = None  # memoized per-process download of the dataset's current files
 
 
 def load() -> dict[str, Any]:
@@ -34,30 +47,108 @@ def save(state: dict[str, Any]) -> None:
     save_state(STATE_PATH, state)
 
 
+def _dataset_slug() -> str:
+    username = os.environ.get("KAGGLE_USERNAME")
+    if not username:
+        raise RuntimeError(
+            "storage._dataset_slug: KAGGLE_USERNAME is not set -- needed to address "
+            "'<username>/music-channel-tracks', same requirement as kaggle_acestep.py's kernel id."
+        )
+    return f"{username}/{KAGGLE_DATASET_SLUG_NAME}"
+
+
+def _download_existing_dataset(dest: Path) -> bool:
+    """Best-effort download of every file currently in the tracks dataset
+    into dest. Returns False (not an error) the first time ever, when the
+    dataset doesn't exist yet."""
+    dest.mkdir(parents=True, exist_ok=True)
+    result = subprocess.run(
+        ["kaggle", "datasets", "download", "-d", _dataset_slug(), "-p", str(dest), "--unzip"],
+        capture_output=True, text=True, timeout=600,
+    )
+    if result.returncode != 0:
+        log.info(
+            "storage._download_existing_dataset: no existing dataset yet, or download failed (%s)",
+            result.stderr.strip()[:300],
+        )
+        return False
+    return True
+
+
 def store_track_file(track: dict[str, Any]) -> dict[str, Any]:
-    """Copies a QC-accepted track's audio into storage/tracks/ and rewrites
-    its path to be repo-relative, so the next (fresh-checkout) workflow run
-    can find it via resolve_track_path(). Returns a new dict -- the caller's
-    track dict is left untouched."""
+    """Copies a QC-accepted track's audio into a fresh local staging dir.
+    `stored["path"]` becomes just the filename (the Kaggle dataset is the
+    source of truth for *where* it lives, not this repo) and
+    `stored["_local_path"]` is the real local file the caller must pass to
+    sync_tracks_to_kaggle_dataset() -- it is popped before anything is
+    written to state.json. Returns a new dict; the caller's dict is left
+    untouched."""
     source = track.get("normalized_path") or track.get("path")
     if not source or not Path(source).exists():
         raise FileNotFoundError(f"storage.store_track_file: missing source audio for {track!r}")
 
-    TRACKS_DIR.mkdir(parents=True, exist_ok=True)
+    staging = Path(tempfile.mkdtemp(prefix="track-upload-"))
     track_id = track.get("track_id") or Path(source).stem
-    dest = TRACKS_DIR / f"{track_id}.wav"
+    filename = f"{track_id}.wav"
+    dest = staging / filename
     shutil.copyfile(source, dest)
 
     stored = dict(track)
-    stored["path"] = str(dest.relative_to(REPO_ROOT))
+    stored["path"] = filename
+    stored["_local_path"] = str(dest)
     stored.pop("normalized_path", None)
     return stored
 
 
-def resolve_track_path(repo_relative_path: str) -> str:
-    """Inverse of store_track_file's path rewrite -- turns the repo-relative
-    path saved in state.json back into an absolute path for this checkout."""
-    return str(REPO_ROOT / repo_relative_path)
+def sync_tracks_to_kaggle_dataset(new_files: list[Path], message: str, state: dict[str, Any]) -> bool:
+    """Pushes `new_files` to the private Kaggle tracks dataset as a new
+    version (or creates the dataset on the very first call). Always
+    downloads whatever's already there first and includes it in the new
+    version's folder -- see the module docstring for why that's required.
+    Mutates state["kaggle_dataset_created"] on a successful first create."""
+    if not new_files:
+        return False
+
+    staging = Path(tempfile.mkdtemp(prefix="kaggle-tracks-sync-"))
+    existed = state.get("kaggle_dataset_created") and _download_existing_dataset(staging)
+    for f in new_files:
+        shutil.copyfile(f, staging / f.name)
+
+    if not existed:
+        metadata = {
+            "title": KAGGLE_DATASET_TITLE,
+            "id": _dataset_slug(),
+            "licenses": [{"name": "unknown"}],  # private dataset of our own AI-generated audio
+        }
+        (staging / "dataset-metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+        result = subprocess.run(
+            ["kaggle", "datasets", "create", "-p", str(staging), "-q"],
+            capture_output=True, text=True, timeout=600,
+        )
+    else:
+        result = subprocess.run(
+            ["kaggle", "datasets", "version", "-p", str(staging), "-m", message, "-q"],
+            capture_output=True, text=True, timeout=600,
+        )
+
+    if result.returncode != 0:
+        log.error("storage.sync_tracks_to_kaggle_dataset: push failed: %s", result.stderr.strip())
+        return False
+
+    state["kaggle_dataset_created"] = True
+    return True
+
+
+def resolve_track_path(filename: str) -> str:
+    """`filename` is the bare name saved in state.json (store_track_file's
+    rewritten `path`) -- audio lives in the Kaggle dataset, not this repo.
+    Downloads the whole dataset once per process (cached) and returns the
+    local path inside that download."""
+    global _dataset_read_cache
+    if _dataset_read_cache is None:
+        _dataset_read_cache = Path(tempfile.mkdtemp(prefix="kaggle-tracks-read-"))
+        _download_existing_dataset(_dataset_read_cache)
+    return str(_dataset_read_cache / filename)
 
 
 def commit_and_push(message: str) -> bool:
