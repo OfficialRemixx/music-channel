@@ -145,7 +145,13 @@ from acestep.pipeline_ace_step import ACEStepPipeline  # noqa: E402
 # ever hands out an Ampere-or-newer GPU (compute capability >= 8).
 dtype = "bfloat16" if torch.cuda.get_device_capability()[0] >= 8 else "float16"
 print(f"using dtype={{dtype}} for {{torch.cuda.get_device_name()}}")
-pipeline = ACEStepPipeline(checkpoint_dir="", dtype=dtype)
+
+# cpu_offload=True keeps weights on CPU and streams each submodule to GPU
+# only when needed (confirmed real, documented ACEStepPipeline kwarg).
+# Needed because a real run on this exact kernel OOM'd at ~14.55/14.56 GiB
+# while just loading the text encoder onto a single T4 -- before the
+# transformer, VAE, or diffusion activations were even on-device yet.
+pipeline = ACEStepPipeline(checkpoint_dir="", dtype=dtype, cpu_offload=True)
 
 manifest = []
 for i, item in enumerate(PROMPTS):
