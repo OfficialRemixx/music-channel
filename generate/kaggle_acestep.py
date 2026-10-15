@@ -131,9 +131,21 @@ subprocess.run(
     check=True,
 )
 
+import torch  # noqa: E402
+
 from acestep.pipeline_ace_step import ACEStepPipeline  # noqa: E402
 
-pipeline = ACEStepPipeline(checkpoint_dir="", dtype="bfloat16")
+# Kaggle's free-tier GPU is a T4 (Turing, pre-Ampere), which has no hardware
+# bfloat16 support. Confirmed live: a real run on this exact kernel completed
+# the full 60-step diffusion in bfloat16 and only then crashed deep in the
+# VAE decoder's conv2d with "RuntimeError: GET was unable to find an engine
+# to execute this computation" -- the well-known cuDNN symptom of running
+# bfloat16 ops on a GPU that can't do them, not a code bug. Detect GPU
+# capability instead of hardcoding, so this still uses bfloat16 if Kaggle
+# ever hands out an Ampere-or-newer GPU (compute capability >= 8).
+dtype = "bfloat16" if torch.cuda.get_device_capability()[0] >= 8 else "float16"
+print(f"using dtype={{dtype}} for {{torch.cuda.get_device_name()}}")
+pipeline = ACEStepPipeline(checkpoint_dir="", dtype=dtype)
 
 manifest = []
 for i, item in enumerate(PROMPTS):
