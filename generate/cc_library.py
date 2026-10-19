@@ -12,9 +12,11 @@ source's outage/missing key never blocks the others:
     https://developer.jamendo.com/v3.0/tracks. Requires JAMENDO_CLIENT_ID.
   - Freesound (generate/freesound_source.py) -- verified against
     https://freesound.org/docs/api/. Requires FREESOUND_API_KEY.
-  - Openverse (generate/openverse_source.py) -- verified against its public
-    OpenAPI spec/client docs. No API key required; also surfaces Wikimedia
-    Commons audio, a genuinely different pool from the other two.
+  - Openverse (generate/openverse_source.py) -- verified against the LIVE
+    API 2026-10-19 after a real run disproved the docs. It DOES require
+    auth (OPENVERSE_CLIENT_ID/OPENVERSE_CLIENT_SECRET), and it's pointed
+    at Wikimedia Commons only, since its other two upstreams are Jamendo
+    and Freesound, which we already query directly here.
 All three independently re-check license via cc_common.license_from_ccurl()
 rather than trusting any single API's request-time filter params.
 
@@ -23,10 +25,10 @@ song" request -- these are independent CC-licensed artists, and
 public-domain works, who have already, explicitly, permitted remixing and
 reuse. Jamendo needs a free developer client_id (JAMENDO_CLIENT_ID
 env/secret, sign up at https://devportal.jamendo.com) and Freesound needs a
-free API key (FREESOUND_API_KEY, sign up at https://freesound.org/apiv2/apply)
--- Claude cannot create either account on the user's behalf (account
-creation is a prohibited action), so a human has to do those one-time
-signups. Openverse needs nothing and works as soon as cc_library.enabled=true.
+free API key (FREESOUND_API_KEY, sign up at https://freesound.org/apiv2/apply).
+Openverse needs an app registered once via its own API, which yields
+OPENVERSE_CLIENT_ID/OPENVERSE_CLIENT_SECRET. Any subset of these can be
+missing: that source logs it and sits out, the others keep working.
 """
 from __future__ import annotations
 

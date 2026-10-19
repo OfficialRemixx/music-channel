@@ -3,10 +3,11 @@
 # A1/A2's AI generation, equal weight, no Kaggle GPU cost so it can run
 # more often to increase total output. Jamendo needs JAMENDO_CLIENT_ID
 # (free signup at https://devportal.jamendo.com), Freesound needs
-# FREESOUND_API_KEY (free signup at https://freesound.org/apiv2/apply).
-# Openverse needs no key. Any subset of these can be missing -- each
-# source is independently skipped if its secret isn't set, never a hard
-# failure for the whole run.
+# FREESOUND_API_KEY (free signup at https://freesound.org/apiv2/apply),
+# and Openverse needs OPENVERSE_CLIENT_ID + OPENVERSE_CLIENT_SECRET
+# (registered once through its own API). Any subset of these can be
+# missing -- each source is independently skipped if its secret isn't
+# set, never a hard failure for the whole run.
 name: A1c cc-library ingest
 
 on:
@@ -35,6 +36,8 @@ jobs:
       - env:
           JAMENDO_CLIENT_ID: ${{ secrets.JAMENDO_CLIENT_ID }}
           FREESOUND_API_KEY: ${{ secrets.FREESOUND_API_KEY }}
+          OPENVERSE_CLIENT_ID: ${{ secrets.OPENVERSE_CLIENT_ID }}
+          OPENVERSE_CLIENT_SECRET: ${{ secrets.OPENVERSE_CLIENT_SECRET }}
           KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

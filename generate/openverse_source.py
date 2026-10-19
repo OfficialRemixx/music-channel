@@ -1,36 +1,52 @@
-"""Third real CC source, added 2026-10-19 alongside Jamendo and
-Freesound: Openverse (api.openverse.org), the WordPress/Creative-Commons
--run search index that aggregates CC-licensed audio across many
-upstream providers (Jamendo, Freesound, Wikimedia Commons audio, and
-others) behind one API with one consistent license filter -- this is
-the "another, genuinely different source" leg: its Wikimedia Commons
-coverage is real public-domain/CC material that isn't on Jamendo or
-Freesound at all.
+"""Third real CC source: Openverse (api.openverse.org), the
+WordPress/Creative-Commons-run index of openly-licensed media.
 
-Verified against the official OpenAPI spec and client docs
-(master-prompt rule 0.2, 2026-10-19 -- see
-https://jentic.com/apis/api.openverse.org/openverse and
-https://apis.io/apis/openverse/openverse-audio-api/):
-  - Base URL: https://api.openverse.org/v1 . Search: GET /v1/audio/ .
-  - No API key is required for basic anonymous search (lower rate
-    limit than an authenticated app, which isn't needed at this
-    pipeline's batch size of one search request per run).
-  - `license=cc0,by` restricts to exactly CC0/CC-BY (never by-sa, which
-    isn't excludable by a documented negation operator, so this is an
-    allow-list same as the other two sources). `license_type=
-    commercial,modification` is a belt-and-braces second filter asking
-    the API itself to only return results that explicitly permit both
-    commercial use and derivatives (we remix tracks and upload to a
-    monetized channel -- both apply).
-  - Confirmed response fields: `license`, `license_url`, `attribution`,
-    `url` (the audio file to download), `waveform_url`. `title` and
-    `creator` are standard Openverse fields but weren't directly
-    confirmed on the pages this was checked against, so they're read
-    defensively with a fallback rather than assumed to always be
-    present -- if a real run shows them under different names, fix
-    here, don't guess further.
+EVERYTHING BELOW WAS VERIFIED AGAINST THE LIVE API ON 2026-10-19
+(master-prompt rule 0.2), not just against docs -- the first
+implementation trusted the docs and was wrong in three separate ways,
+all of which a real A1c run then exposed:
+
+1. "No API key needed, anonymous just gets a lower rate limit" was WRONG
+   -- the live API returns 401 Unauthorized. Auth is mandatory: register
+   an application once (POST /v1/auth_tokens/register/), then exchange
+   client_id/client_secret for a 12-hour bearer token via
+   POST /v1/auth_tokens/token/ (OAuth2 client_credentials). That token
+   goes in an Authorization: Bearer header on every search.
+2. Multi-word queries are ANDed, not OR'd. Passing the whole tag string
+   ("lofi chill ambient instrumental") as one `q` returned 2 results;
+   a single tag ("lofi") returned 240. So this queries ONE TAG AT A TIME
+   and merges -- see _TAG splitting in fetch_candidates().
+3. `category=music` silently excludes almost all Wikimedia content (it's
+   simply not populated there) -- with it, source=wikimedia_audio
+   returned 0 results; without it, 118. So no category filter is sent;
+   junk is filtered client-side instead (see below).
+
+WHY source=wikimedia_audio ONLY: the live /v1/audio/stats/ endpoint
+shows Openverse's audio index is exactly three sources -- jamendo,
+freesound and wikimedia_audio. We already query Jamendo and Freesound
+*directly* (cc_library.py, freesound_source.py), so letting Openverse
+return those too would just re-fetch tracks we already have and burn the
+batch on near-duplicates. Wikimedia Commons (~3.98M items) is the one
+pool the other two sources can't reach, so that's the only thing asked
+for here. That makes this source genuinely additive rather than
+redundant.
+
+Client-side filtering (because the API can't express it):
+  - `duration` is in MILLISECONDS here (a 228s track reports 228000),
+    unlike Freesound's seconds. Short items are dropped.
+  - Wikimedia audio is full of one-second dictionary pronunciation
+    clips; those carry category == "pronunciation", so they're dropped.
+  - license is re-checked from `license_url` with the shared
+    cc_common.license_from_ccurl(), same as every other source.
+
+Confirmed response fields (read off a live result, not assumed):
+  id, title, creator, url, foreign_landing_url, license, license_version,
+  license_url, provider, source, category, duration, filetype, filesize,
+  attribution, audio_set, tags.
 """
 from __future__ import annotations
+
+import os
 
 import requests
 
@@ -41,54 +57,108 @@ from .cc_common import has_forbidden_marker, license_from_ccurl
 log = get_logger(__name__)
 
 OPENVERSE_AUDIO_URL = "https://api.openverse.org/v1/audio/"
+OPENVERSE_TOKEN_URL = "https://api.openverse.org/v1/auth_tokens/token/"
+
+MIN_DURATION_MS = 20_000   # below this it's a pronunciation clip/sting, not usable music
+MAX_DURATION_MS = 600_000  # cc_library.py trims to length later; this just rejects outliers
+SKIP_CATEGORIES = {"pronunciation"}  # Wikimedia's dictionary audio, never music
+
+
+def _access_token() -> str | None:
+    """Exchanges the registered app's client credentials for a bearer
+    token (valid ~12h; every A1c run is a fresh process, so one fetch per
+    run is fine). Returns None -- never raises -- if the credentials
+    aren't set or the exchange fails, so this source just sits out."""
+    client_id = os.environ.get("OPENVERSE_CLIENT_ID")
+    client_secret = os.environ.get("OPENVERSE_CLIENT_SECRET")
+    if not (client_id and client_secret):
+        log.info("openverse_source: OPENVERSE_CLIENT_ID/SECRET not set, skipping this source")
+        return None
+    try:
+        resp = requests.post(
+            OPENVERSE_TOKEN_URL,
+            data={
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "grant_type": "client_credentials",
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json().get("access_token")
+    except Exception:
+        log.exception("openverse_source: token exchange failed")
+        return None
+
+
+def _usable(item: dict) -> bool:
+    """One place for every reason a live result gets rejected."""
+    if (item.get("category") or "").lower() in SKIP_CATEGORIES:
+        return False
+    duration = item.get("duration")
+    if duration is None or not (MIN_DURATION_MS <= duration <= MAX_DURATION_MS):
+        return False
+    if not item.get("url"):
+        return False
+    license_url = item.get("license_url")
+    if license_from_ccurl(license_url) not in {"CC0", "CC-BY"} or has_forbidden_marker(license_url):
+        return False
+    return True
 
 
 def fetch_candidates(cfg: dict, limit: int) -> list[dict]:
     """Returns candidates in the same shape as the other two sources.
-    Never raises -- a transient failure here just means this source
-    contributes 0 tracks to this run, same pattern as freesound_source.
-    """
-    lane_tags = cfg.get("music", {}).get("cc_library", {}).get("tags", "lofi chill ambient instrumental")
-    params = {
-        "q": lane_tags,
-        "license": "cc0,by",
-        "license_type": "commercial,modification",
-        "category": "music",
-        "page_size": min(limit * 3, 150),
-    }
-    try:
-        resp = requests.get(OPENVERSE_AUDIO_URL, params=params, timeout=30)
-        resp.raise_for_status()
-        results = resp.json().get("results", [])
-    except Exception:
-        log.exception("openverse_source: search request failed")
+    Never raises -- a failure here just means 0 tracks from Openverse
+    this run, same pattern as freesound_source."""
+    token = _access_token()
+    if not token:
         return []
 
-    candidates = []
-    for item in results:
-        download_url = item.get("url")
-        license_url = item.get("license_url")
-        license_str = license_from_ccurl(license_url)
-        if not download_url or license_str not in {"CC0", "CC-BY"} or has_forbidden_marker(license_url):
-            continue
+    lane_tags = cfg.get("music", {}).get("cc_library", {}).get("tags", "lofi chill ambient instrumental")
+    tags = [t for t in lane_tags.split() if t]
+    headers = {"Authorization": f"Bearer {token}"}
 
-        # title/creator field names aren't independently confirmed (see
-        # module docstring) -- fall back rather than crash on a miss.
-        title = item.get("title") or item.get("name") or "Untitled track"
-        creator = item.get("creator") or item.get("creator_name") or "unknown artist"
-        source_url = item.get("foreign_landing_url") or item.get("url")
-
-        candidates.append({
-            "title": title,
-            "artist": creator,
-            "download_url": download_url,
-            "license": license_str,
-            "license_url": license_url,
-            "source_url": source_url,
-            "provider": "openverse",
-        })
+    candidates: list[dict] = []
+    seen_urls: set[str] = set()
+    scanned = 0
+    for tag in tags:  # one tag per request -- see module docstring note 2
         if len(candidates) >= limit:
             break
+        params = {
+            "q": tag,
+            "license": "cc0,by",
+            "license_type": "commercial,modification",  # we remix, and the channel is monetized
+            "source": "wikimedia_audio",  # the one pool Jamendo/Freesound can't reach
+            "page_size": 50,
+        }
+        try:
+            resp = requests.get(OPENVERSE_AUDIO_URL, params=params, headers=headers, timeout=30)
+            resp.raise_for_status()
+            results = resp.json().get("results", [])
+        except Exception:
+            log.exception("openverse_source: search failed for tag %r", tag)
+            continue
 
-    log.info("openverse_source: %d/%d candidates passed filters", len(candidates), len(results))
+        scanned += len(results)
+        for item in results:
+            if len(candidates) >= limit:
+                break
+            if not _usable(item):
+                continue
+            url = item["url"]
+            if url in seen_urls:  # the same track can match several tags
+                continue
+            seen_urls.add(url)
+            candidates.append({
+                "title": item.get("title") or "Untitled track",
+                "artist": item.get("creator") or "unknown artist",
+                "download_url": url,
+                "license": license_from_ccurl(item.get("license_url")),
+                "license_url": item.get("license_url"),
+                "source_url": item.get("foreign_landing_url") or url,
+                "provider": "openverse/wikimedia",
+            })
+
+    log.info("openverse_source: %d/%d candidates passed filters across %d tag(s)",
+             len(candidates), scanned, len(tags))
     return candidates

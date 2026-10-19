@@ -48,9 +48,12 @@ music:
   # the same qc.py gate as everything else. Equal weight to kaggle_acestep
   # (same tracks_per_batch), and scheduled MORE often (3x/week vs A1's
   # 2x/week) since it has no Kaggle GPU-hour cost -- this is the "qty
-  # badhao" lever. Off by default (enabled: false) until at least one
-  # source secret is set -- Jamendo needs JAMENDO_CLIENT_ID, Freesound
-  # needs FREESOUND_API_KEY (both free signups), Openverse needs nothing.
+  # badhao" lever. Each source needs its own secret and is skipped
+  # (logged, not fatal) without it: Jamendo JAMENDO_CLIENT_ID, Freesound
+  # FREESOUND_API_KEY, Openverse OPENVERSE_CLIENT_ID+_SECRET.
+  # NOTE: `tags` is used whole by Jamendo (its fuzzytags param ORs terms),
+  # but split into one-word queries by Freesound and Openverse, which
+  # both AND multi-word queries -- verified on the live APIs 2026-10-19.
   cc_library:
     enabled: true  # 2026-10-19: JAMENDO_CLIENT_ID set as a repo secret -- Jamendo source now live.
                     # Freesound still needs FREESOUND_API_KEY; Openverse works with no key either way.

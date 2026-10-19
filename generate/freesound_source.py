@@ -47,6 +47,18 @@ FREESOUND_SEARCH_URL = "https://freesound.org/apiv2/search/"
 MIN_DURATION_S = 20   # below this it's almost certainly a short SFX, not usable background music
 MAX_DURATION_S = 400  # sane upper bound before the per-track trim step in cc_library.py
 
+# Confirmed against the live API 2026-10-19: the duration range filter
+# works, and it matters a lot -- Freesound is full of 3-second loops, so
+# filtering server-side means a page isn't wasted on them. The license
+# allow-list here uses the human-readable labels (that's what the filter
+# syntax takes), while the RESPONSE's `license` field is a CC URL, which
+# is what gets re-checked locally below.
+_FILTER = (
+    'category:Music '
+    'license:("Attribution" OR "Creative Commons 0") '
+    f"duration:[{MIN_DURATION_S} TO {MAX_DURATION_S}]"
+)
+
 
 def fetch_candidates(cfg: dict, limit: int) -> list[dict]:
     """Returns a list of candidate dicts in the same shape as
@@ -61,49 +73,65 @@ def fetch_candidates(cfg: dict, limit: int) -> list[dict]:
         return []
 
     lane_tags = cfg.get("music", {}).get("cc_library", {}).get("tags", "lofi chill ambient instrumental")
-    params = {
-        "query": lane_tags,
-        "token": api_key,
-        "filter": 'category:Music license:("Attribution" OR "Creative Commons 0")',
-        "fields": "id,name,username,license,duration,previews,type",
-        "page_size": min(limit * 3, 150),  # 150 = Freesound's documented max page_size
-    }
-    try:
-        resp = requests.get(FREESOUND_SEARCH_URL, params=params, timeout=30)
-        resp.raise_for_status()
-        results = resp.json().get("results", [])
-    except Exception:
-        log.exception("freesound_source: search request failed")
-        return []
+    # One tag per request: confirmed on the live API 2026-10-19 that
+    # Freesound ANDs a multi-word query -- the full tag string returned 2
+    # results where a single tag ("lofi") returned 1589.
+    tags = [t for t in lane_tags.split() if t]
 
-    candidates = []
-    for item in results:
-        duration = item.get("duration")
-        if duration is None or not (MIN_DURATION_S <= duration <= MAX_DURATION_S):
-            continue
-
-        license_url = item.get("license")  # Freesound's response field is itself a CC URL
-        license_str = license_from_ccurl(license_url)
-        if license_str not in {"CC0", "CC-BY"} or has_forbidden_marker(license_url):
-            continue
-
-        preview_url = (item.get("previews") or {}).get("preview-hq-mp3")
-        if not preview_url:
-            continue
-
-        sound_id = item.get("id")
-        username = item.get("username") or "unknown artist"
-        candidates.append({
-            "title": item.get("name") or f"freesound-{sound_id}",
-            "artist": username,
-            "download_url": preview_url,
-            "license": license_str,
-            "license_url": license_url,
-            "source_url": f"https://freesound.org/people/{username}/sounds/{sound_id}/",
-            "provider": "freesound",
-        })
+    candidates: list[dict] = []
+    seen_ids: set[object] = set()
+    scanned = 0
+    for tag in tags:
         if len(candidates) >= limit:
             break
+        params = {
+            "query": tag,
+            "token": api_key,
+            "filter": _FILTER,
+            "fields": "id,name,username,license,duration,previews",
+            "page_size": 50,
+        }
+        try:
+            resp = requests.get(FREESOUND_SEARCH_URL, params=params, timeout=30)
+            resp.raise_for_status()
+            results = resp.json().get("results", [])
+        except Exception:
+            log.exception("freesound_source: search failed for tag %r", tag)
+            continue
 
-    log.info("freesound_source: %d/%d candidates passed filters", len(candidates), len(results))
+        scanned += len(results)
+        for item in results:
+            if len(candidates) >= limit:
+                break
+            sound_id = item.get("id")
+            if sound_id in seen_ids:  # the same sound can match several tags
+                continue
+
+            duration = item.get("duration")
+            if duration is None or not (MIN_DURATION_S <= duration <= MAX_DURATION_S):
+                continue
+
+            license_url = item.get("license")  # Freesound's response field is itself a CC URL
+            license_str = license_from_ccurl(license_url)
+            if license_str not in {"CC0", "CC-BY"} or has_forbidden_marker(license_url):
+                continue
+
+            preview_url = (item.get("previews") or {}).get("preview-hq-mp3")
+            if not preview_url:
+                continue
+
+            seen_ids.add(sound_id)
+            username = item.get("username") or "unknown artist"
+            candidates.append({
+                "title": item.get("name") or f"freesound-{sound_id}",
+                "artist": username,
+                "download_url": preview_url,
+                "license": license_str,
+                "license_url": license_url,
+                "source_url": f"https://freesound.org/people/{username}/sounds/{sound_id}/",
+                "provider": "freesound",
+            })
+
+    log.info("freesound_source: %d/%d candidates passed filters across %d tag(s)",
+             len(candidates), scanned, len(tags))
     return candidates
