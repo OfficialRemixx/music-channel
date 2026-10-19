@@ -41,6 +41,19 @@ music:
   # renders -- see qc.py's MAX_DEDUPE_SIMILARITY comment for the full story.
   dedupe_similarity_max: 0.995  # cross-track chroma-fingerprint cosine similarity reject threshold (qc.py)
 
+  # Added 2026-10-19: second, independent track source -- real CC0/CC-BY
+  # tracks from Jamendo (independent artists who've explicitly licensed
+  # reuse+remixing), bass-boosted, run through the same qc.py gate as
+  # everything else. Equal weight to kaggle_acestep (same tracks_per_batch),
+  # and scheduled MORE often (3x/week vs A1's 2x/week) since it has no
+  # Kaggle GPU-hour cost -- this is the "qty badhao" lever. Off by default
+  # until JAMENDO_CLIENT_ID is set (free signup, see generate/cc_library.py).
+  cc_library:
+    enabled: false
+    tracks_per_batch: 26
+    tags: "lofi chill ambient instrumental"
+    bass_boost_db: 6.0
+
 qc:
   pass_rate_alert_below: 0.5   # a batch's QC pass-rate below this pauses new A1 submissions (circuit breaker)
 

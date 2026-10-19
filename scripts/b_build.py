@@ -59,6 +59,7 @@ def main() -> int:
         vol=len(state["uploaded_videos"]) + 1,
         duration_min=duration_min,
         cfg=cfg,
+        tracks=mix["tracks"],
     )
     metadata["publish_at"] = next_publish_slot_utc(cfg)
 
