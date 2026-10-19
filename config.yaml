@@ -52,7 +52,8 @@ music:
   # source secret is set -- Jamendo needs JAMENDO_CLIENT_ID, Freesound
   # needs FREESOUND_API_KEY (both free signups), Openverse needs nothing.
   cc_library:
-    enabled: false
+    enabled: true  # 2026-10-19: JAMENDO_CLIENT_ID set as a repo secret -- Jamendo source now live.
+                    # Freesound still needs FREESOUND_API_KEY; Openverse works with no key either way.
     tracks_per_batch: 26
     tags: "lofi chill ambient instrumental"
     bass_boost_db: 6.0
