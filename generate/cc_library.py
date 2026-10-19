@@ -43,7 +43,13 @@ from common.logging_setup import get_logger
 from remix import bass_boost_track
 
 from .base import BatchSpec, Job, MusicProvider
-from .cc_common import has_forbidden_marker, license_from_ccurl
+from .cc_common import (
+    MAX_SOURCE_DURATION_S,
+    MIN_SOURCE_DURATION_S,
+    fetch_results_with_retry,
+    has_forbidden_marker,
+    license_from_ccurl,
+)
 from .freesound_source import fetch_candidates as _freesound_candidates
 from .openverse_source import fetch_candidates as _openverse_candidates
 
@@ -71,13 +77,18 @@ def _jamendo_candidates(cfg: dict, limit: int) -> list[dict]:
         "include": "musicinfo",
         "audioformat": "mp32",
         "order": "popularity_month",
+        # Verified live 2026-10-19: without this, Jamendo happily returns
+        # 36s tracks, which qc.py (45s floor) then rejects after we've
+        # already downloaded and bass-boosted them. With it, the shortest
+        # result was 52s.
+        "durationbetween": f"{int(MIN_SOURCE_DURATION_S)}_{int(MAX_SOURCE_DURATION_S)}",
     }
-    try:
-        resp = requests.get(JAMENDO_TRACKS_URL, params=params, timeout=30)
-        resp.raise_for_status()
-        results = resp.json().get("results", [])
-    except Exception:
-        log.exception("cc_library._jamendo_candidates: search request failed")
+    # Retries on an empty-but-successful response -- Jamendo does that to
+    # identical requests about a third of the time. See
+    # cc_common.fetch_results_with_retry's docstring for the measurements.
+    results = fetch_results_with_retry(JAMENDO_TRACKS_URL, params)
+    if not results:
+        log.warning("cc_library._jamendo_candidates: no results after retries")
         return []
 
     candidates = []

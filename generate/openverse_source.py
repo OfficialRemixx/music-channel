@@ -52,15 +52,26 @@ import requests
 
 from common.logging_setup import get_logger
 
-from .cc_common import has_forbidden_marker, license_from_ccurl
+from .cc_common import (
+    MAX_SOURCE_DURATION_S,
+    MIN_SOURCE_DURATION_S,
+    fetch_results_with_retry,
+    has_forbidden_marker,
+    license_from_ccurl,
+)
 
 log = get_logger(__name__)
 
 OPENVERSE_AUDIO_URL = "https://api.openverse.org/v1/audio/"
 OPENVERSE_TOKEN_URL = "https://api.openverse.org/v1/auth_tokens/token/"
 
-MIN_DURATION_MS = 20_000   # below this it's a pronunciation clip/sting, not usable music
-MAX_DURATION_MS = 600_000  # cc_library.py trims to length later; this just rejects outliers
+# Derived from qc.py's real floor (via cc_common), NOT hand-picked -- and
+# converted to ms, because Openverse reports duration in MILLISECONDS
+# while Freesound reports seconds. The first version hardcoded a 20s
+# floor, which on Freesound let through tracks QC then rejected; same
+# constant now drives all three sources.
+MIN_DURATION_MS = int(MIN_SOURCE_DURATION_S * 1000)
+MAX_DURATION_MS = int(MAX_SOURCE_DURATION_S * 1000)
 SKIP_CATEGORIES = {"pronunciation"}  # Wikimedia's dictionary audio, never music
 
 
@@ -131,14 +142,7 @@ def fetch_candidates(cfg: dict, limit: int) -> list[dict]:
             "source": "wikimedia_audio",  # the one pool Jamendo/Freesound can't reach
             "page_size": 50,
         }
-        try:
-            resp = requests.get(OPENVERSE_AUDIO_URL, params=params, headers=headers, timeout=30)
-            resp.raise_for_status()
-            results = resp.json().get("results", [])
-        except Exception:
-            log.exception("openverse_source: search failed for tag %r", tag)
-            continue
-
+        results = fetch_results_with_retry(OPENVERSE_AUDIO_URL, params, headers=headers)
         scanned += len(results)
         for item in results:
             if len(candidates) >= limit:

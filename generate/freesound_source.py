@@ -35,17 +35,27 @@ from __future__ import annotations
 
 import os
 
-import requests
-
 from common.logging_setup import get_logger
 
-from .cc_common import has_forbidden_marker, license_from_ccurl
+from .cc_common import (
+    MAX_SOURCE_DURATION_S,
+    MIN_SOURCE_DURATION_S,
+    fetch_results_with_retry,
+    has_forbidden_marker,
+    license_from_ccurl,
+)
 
 log = get_logger(__name__)
 
 FREESOUND_SEARCH_URL = "https://freesound.org/apiv2/search/"
-MIN_DURATION_S = 20   # below this it's almost certainly a short SFX, not usable background music
-MAX_DURATION_S = 400  # sane upper bound before the per-track trim step in cc_library.py
+# Derived from qc.py's real floor, NOT hand-picked. The first version
+# used 20s here, which let 24-30s Freesound tracks through for QC (45s
+# floor) to then reject -- a live run wasted a whole batch that way,
+# 25 of 26 tracks rejected as duration_out_of_range. Verified live
+# 2026-10-19 that the stricter floor still leaves plenty: 353 lofi /
+# 5935 ambient / 378 chill / 1836 instrumental.
+MIN_DURATION_S = MIN_SOURCE_DURATION_S
+MAX_DURATION_S = MAX_SOURCE_DURATION_S
 
 # Confirmed against the live API 2026-10-19: the duration range filter
 # works, and it matters a lot -- Freesound is full of 3-second loops, so
@@ -56,7 +66,7 @@ MAX_DURATION_S = 400  # sane upper bound before the per-track trim step in cc_li
 _FILTER = (
     'category:Music '
     'license:("Attribution" OR "Creative Commons 0") '
-    f"duration:[{MIN_DURATION_S} TO {MAX_DURATION_S}]"
+    f"duration:[{int(MIN_DURATION_S)} TO {int(MAX_DURATION_S)}]"
 )
 
 
@@ -91,14 +101,7 @@ def fetch_candidates(cfg: dict, limit: int) -> list[dict]:
             "fields": "id,name,username,license,duration,previews",
             "page_size": 50,
         }
-        try:
-            resp = requests.get(FREESOUND_SEARCH_URL, params=params, timeout=30)
-            resp.raise_for_status()
-            results = resp.json().get("results", [])
-        except Exception:
-            log.exception("freesound_source: search failed for tag %r", tag)
-            continue
-
+        results = fetch_results_with_retry(FREESOUND_SEARCH_URL, params)
         scanned += len(results)
         for item in results:
             if len(candidates) >= limit:
