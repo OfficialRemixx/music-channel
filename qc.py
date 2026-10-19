@@ -44,7 +44,19 @@ CLIP_SAMPLE_THRESHOLD = 0.999     # fraction of full-scale counted as clipped
 MAX_CLIPPED_RATIO = 0.0005        # fraction of samples allowed at/above that
 LOOP_WINDOW_S = 4.0
 MAX_SELF_SIMILARITY = 0.97        # near-identical repeated window -> short-loop artifact
-MAX_DEDUPE_SIMILARITY = 0.92      # cosine similarity across DIFFERENT tracks' chroma fingerprints
+# Real-world finding (2026-10-15): the 12-bin chroma fingerprint only encodes
+# pitch-class ENERGY DISTRIBUTION -- i.e. mostly key + instrumentation, not
+# melody/rhythm/timbre. On a real 26-track batch, genuinely different tracks
+# that merely shared a key scored 0.92-0.98 cosine similarity against each
+# other, so a 0.92 threshold rejected 18/26 tracks as "duplicates" when they
+# weren't. This coarse fingerprint can only reliably catch near-IDENTICAL
+# renders (e.g. a retry that reproduced the same seed/output), not
+# meaningfully-different same-key compositions -- a real limitation, not
+# tuned away by this number alone. 0.995 is a conservative value chosen to
+# stop rejecting legitimately different tracks while still catching true
+# repeats; a more discriminating fingerprint (e.g. MFCC/spectral-flux time
+# series) is the real fix if tighter dedupe is ever needed.
+MAX_DEDUPE_SIMILARITY = 0.995      # cosine similarity across DIFFERENT tracks' chroma fingerprints
 
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 # Krumhansl-Schmuckler key profiles (classic cognitive-science tonal-hierarchy

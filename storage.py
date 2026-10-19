@@ -114,13 +114,27 @@ def sync_tracks_to_kaggle_dataset(new_files: list[Path], message: str, state: di
     for f in new_files:
         shutil.copyfile(f, staging / f.name)
 
+    # Real bug fixed 2026-10-19: `kaggle datasets version` needs a
+    # dataset-metadata.json in the folder being versioned JUST LIKE `datasets
+    # create` does -- it's not only a first-create thing. `kaggle datasets
+    # download --unzip` does NOT include this file among the downloaded data
+    # files, so _download_existing_dataset() above never restores it, and the
+    # very first real sync after the create (7-track batch, 2026-10-15)
+    # failed with "Metadata file not found: dataset-metadata.json" -- this
+    # write used to be gated on `if not existed`, so it silently never ran on
+    # the version path. That failure wasn't checked by the caller either, so
+    # a2_collect.py kept going and committed track_pool entries whose audio
+    # was never actually pushed to the dataset. Writing this unconditionally
+    # fixes the version path; a2_collect.py's return-value check (see there)
+    # fixes the silent-continue part.
+    metadata = {
+        "title": KAGGLE_DATASET_TITLE,
+        "id": _dataset_slug(),
+        "licenses": [{"name": "unknown"}],  # private dataset of our own AI-generated audio
+    }
+    (staging / "dataset-metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+
     if not existed:
-        metadata = {
-            "title": KAGGLE_DATASET_TITLE,
-            "id": _dataset_slug(),
-            "licenses": [{"name": "unknown"}],  # private dataset of our own AI-generated audio
-        }
-        (staging / "dataset-metadata.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
         result = subprocess.run(
             ["kaggle", "datasets", "create", "-p", str(staging), "-q"],
             capture_output=True, text=True, timeout=600,

@@ -38,6 +38,8 @@ def main() -> int:
     provider = KaggleAceStepProvider(cfg)
     still_pending = []
     new_local_files: list[Path] = []  # staged audio from store_track_file(), synced to Kaggle once at the end
+    newly_appended: list[dict] = []   # the SAME dict objects pushed into state["track_pool"] this run --
+                                       # rolled back below if the Kaggle sync fails (see real bug, 2026-10-15)
 
     for entry in state["pending_generation_jobs"]:
         job = Job(job_id=entry["job_id"], provider=entry["provider"],
@@ -99,6 +101,7 @@ def main() -> int:
             stored = storage.store_track_file(track)
             new_local_files.append(Path(stored.pop("_local_path")))
             state["track_pool"].append(stored)
+            newly_appended.append(stored)
             batch_fingerprints.append(stored.get("fingerprint"))
             accepted += 1
 
@@ -122,9 +125,26 @@ def main() -> int:
         )
 
     if new_local_files:
-        storage.sync_tracks_to_kaggle_dataset(
+        synced = storage.sync_tracks_to_kaggle_dataset(
             new_local_files, f"A2: +{len(new_local_files)} track(s)", state
         )
+        if not synced:
+            # Real bug found 2026-10-15: this return value used to be
+            # ignored, so a failed push still left these tracks in
+            # track_pool with a `path` pointing at audio that was never
+            # actually uploaded to the Kaggle dataset -- silent data loss.
+            # Roll the accepted-this-run entries back out rather than
+            # record tracks whose bytes don't exist anywhere.
+            for stored in newly_appended:
+                if stored in state["track_pool"]:
+                    state["track_pool"].remove(stored)
+            alert_failure(
+                "A2 collect -- Kaggle Dataset sync failed",
+                f"{len(new_local_files)} accepted track(s) passed QC/dedupe but could not be "
+                "pushed to the Kaggle Dataset, so they were NOT added to track_pool (their audio "
+                "would otherwise be unreachable). Check storage.sync_tracks_to_kaggle_dataset logs.",
+                cfg=cfg,
+            )
 
     state["pending_generation_jobs"] = still_pending
     storage.save(state)

@@ -34,7 +34,12 @@ music:
   keep_ratio: 0.33          # NOT YET enforced anywhere in code -- see system-overview doc
   max_track_reuse: 1
   kaggle_hours_per_week_cap: 10
-  dedupe_similarity_max: 0.92   # cross-track chroma-fingerprint cosine similarity reject threshold (qc.py)
+  # Real batch (2026-10-15) showed 0.92 was far too aggressive -- the chroma
+  # fingerprint mostly encodes key/instrumentation, so different tracks in
+  # the same key routinely scored 0.92-0.98 and got wrongly rejected as
+  # "duplicates" (18/26 tracks). Raised to only catch near-identical
+  # renders -- see qc.py's MAX_DEDUPE_SIMILARITY comment for the full story.
+  dedupe_similarity_max: 0.995  # cross-track chroma-fingerprint cosine similarity reject threshold (qc.py)
 
 qc:
   pass_rate_alert_below: 0.5   # a batch's QC pass-rate below this pauses new A1 submissions (circuit breaker)
