@@ -1515,6 +1515,35 @@
       "source_url": "https://www.jamendo.com/track/941482",
       "track_id": "cc-deep_focus-43577173-025",
       "used_count": 0
+    },
+    {
+      "attribution": "\"Doctor Dreamchip - Lofi Keyboard Pack - Rhodes80BPM C Major - 12.wav\" by Doctor_Dreamchip, CC-BY (https://creativecommons.org/licenses/by/4.0/), remixed (bass-boosted), via freesound. Source: https://freesound.org/people/Doctor_Dreamchip/sounds/517965/",
+      "bpm": 176.5,
+      "fingerprint": [
+        0.09472978422231956,
+        0.02828722645111566,
+        0.18444337827755886,
+        0.03996829359464697,
+        0.20067433187656375,
+        0.10400597128630196,
+        0.03565126470158236,
+        0.10299096445844964,
+        0.022936660535976604,
+        0.08864602818181638,
+        0.02412602104640814,
+        0.07354007536726005
+      ],
+      "key": "E minor",
+      "license": "CC-BY",
+      "license_url": "https://creativecommons.org/licenses/by/4.0/",
+      "loudness_dbfs": -14.88,
+      "model": "cc_library/freesound+bass_boost",
+      "path": "cc-deep_focus-15c73b54-016.wav",
+      "prompt": "Doctor_Dreamchip - Doctor Dreamchip - Lofi Keyboard Pack - Rhodes80BPM C Major - 12.wav (bass-boosted remix, via freesound)",
+      "score": 1.0,
+      "source_url": "https://freesound.org/people/Doctor_Dreamchip/sounds/517965/",
+      "track_id": "cc-deep_focus-15c73b54-016",
+      "used_count": 0
     }
   ],
   "uploaded_videos": [],
