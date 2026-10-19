@@ -1,12 +1,14 @@
 """A1c entrypoint (.github/workflows/a1c-cc-ingest.yml): a second,
 independent track source alongside A1/A2's AI generation -- real
-CC0/CC-BY-licensed tracks from Jamendo, bass-boosted (see remix.py), then
-run through the SAME qc.py gate (silence/clipping/loudness/duration/
-near-duplicate) as every other track before joining track_pool. Unlike
-kaggle_acestep this isn't a two-phase GPU job: CCLibraryProvider.submit()
-already does the real fetch+download+remix work and returns a complete
-job, so this script does fetch->QC->dedupe->store->sync in one run, the
-same shape as a2_collect.py's per-job loop body.
+CC0/CC-BY-licensed tracks pooled from THREE sources (Jamendo, Freesound,
+Openverse -- see generate/cc_library.py's module docstring), bass-boosted
+(see remix.py), then run through the SAME qc.py gate (silence/clipping/
+loudness/duration/near-duplicate) as every other track before joining
+track_pool. Unlike kaggle_acestep this isn't a two-phase GPU job:
+CCLibraryProvider.submit() already does the real fetch+download+remix
+work (across all three sources) and returns a complete job, so this
+script does fetch->QC->dedupe->store->sync in one run, the same shape
+as a2_collect.py's per-job loop body.
 
 Runs on its own schedule, independent of the AI-generation circuit breaker
 (music.circuit_breaker_paused) -- that breaker exists to stop wasting
@@ -66,7 +68,9 @@ def main() -> int:
     tracks = provider.fetch(job)
     if not tracks:
         log.info("a1c_cc_ingest: no usable tracks returned for %s "
-                  "(check JAMENDO_CLIENT_ID and music.cc_library_tags)", batch_id)
+                  "(check JAMENDO_CLIENT_ID / FREESOUND_API_KEY secrets and "
+                  "music.cc_library.tags -- Openverse needs no key and should "
+                  "still contribute unless it's down)", batch_id)
         return 0
 
     new_local_files: list[Path] = []

@@ -42,12 +42,15 @@ music:
   dedupe_similarity_max: 0.995  # cross-track chroma-fingerprint cosine similarity reject threshold (qc.py)
 
   # Added 2026-10-19: second, independent track source -- real CC0/CC-BY
-  # tracks from Jamendo (independent artists who've explicitly licensed
-  # reuse+remixing), bass-boosted, run through the same qc.py gate as
-  # everything else. Equal weight to kaggle_acestep (same tracks_per_batch),
-  # and scheduled MORE often (3x/week vs A1's 2x/week) since it has no
-  # Kaggle GPU-hour cost -- this is the "qty badhao" lever. Off by default
-  # until JAMENDO_CLIENT_ID is set (free signup, see generate/cc_library.py).
+  # tracks pooled from THREE sources (Jamendo, Freesound, Openverse --
+  # see generate/cc_library.py's module docstring), independent artists
+  # who've explicitly licensed reuse+remixing, bass-boosted, run through
+  # the same qc.py gate as everything else. Equal weight to kaggle_acestep
+  # (same tracks_per_batch), and scheduled MORE often (3x/week vs A1's
+  # 2x/week) since it has no Kaggle GPU-hour cost -- this is the "qty
+  # badhao" lever. Off by default (enabled: false) until at least one
+  # source secret is set -- Jamendo needs JAMENDO_CLIENT_ID, Freesound
+  # needs FREESOUND_API_KEY (both free signups), Openverse needs nothing.
   cc_library:
     enabled: false
     tracks_per_batch: 26

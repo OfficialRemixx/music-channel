@@ -5,24 +5,28 @@ carry license + source URL + attribution text, stored alongside it, because
 even properly-licensed free tracks can get a mistaken Content ID claim and
 we need proof on hand.
 
-Real source (verified against https://developer.jamendo.com/v3.0/tracks,
-2026-10-19 -- master-prompt rule 0.2): the Jamendo API. Independent artists
-upload under Creative Commons licenses they choose themselves; `ccnc=0`,
-`ccnd=0`, `ccsa=0` ask the API for only the licenses with no restrictions
-beyond attribution (CC-BY/CC0), and `license_ccurl` on every result is
-parsed and re-checked locally against ALLOWED_LICENSES as a second,
-don't-trust-the-request-params check. `audiodownload_allowed` is checked per
-track since an artist can disable downloads even on an otherwise-matching
-license. `content_id_free` (when present) is logged for extra confidence but
-is not relied on alone.
+Pulls from THREE independent real sources (per user request, 2026-10-19, to
+not rely on a single source), each isolated in its own module so one
+source's outage/missing key never blocks the others:
+  - Jamendo (this file's _jamendo_candidates) -- verified against
+    https://developer.jamendo.com/v3.0/tracks. Requires JAMENDO_CLIENT_ID.
+  - Freesound (generate/freesound_source.py) -- verified against
+    https://freesound.org/docs/api/. Requires FREESOUND_API_KEY.
+  - Openverse (generate/openverse_source.py) -- verified against its public
+    OpenAPI spec/client docs. No API key required; also surfaces Wikimedia
+    Commons audio, a genuinely different pool from the other two.
+All three independently re-check license via cc_common.license_from_ccurl()
+rather than trusting any single API's request-time filter params.
 
-This is a genuinely different source from any "trending commercial song"
-request -- these are independent CC-licensed artists and public-domain
-works who have already, explicitly, permitted remixing and reuse. Requires
-a free Jamendo developer client_id (JAMENDO_CLIENT_ID env/secret) -- sign up
-at https://devportal.jamendo.com; Claude cannot create that account on the
-user's behalf (account creation is a prohibited action), so a human has to
-do that one-time signup.
+This is a genuinely different kind of source from any "trending commercial
+song" request -- these are independent CC-licensed artists, and
+public-domain works, who have already, explicitly, permitted remixing and
+reuse. Jamendo needs a free developer client_id (JAMENDO_CLIENT_ID
+env/secret, sign up at https://devportal.jamendo.com) and Freesound needs a
+free API key (FREESOUND_API_KEY, sign up at https://freesound.org/apiv2/apply)
+-- Claude cannot create either account on the user's behalf (account
+creation is a prohibited action), so a human has to do those one-time
+signups. Openverse needs nothing and works as soon as cc_library.enabled=true.
 """
 from __future__ import annotations
 
@@ -30,7 +34,6 @@ import os
 import tempfile
 import uuid
 from pathlib import Path
-from urllib.parse import urlparse
 
 import requests
 
@@ -38,37 +41,21 @@ from common.logging_setup import get_logger
 from remix import bass_boost_track
 
 from .base import BatchSpec, Job, MusicProvider
+from .cc_common import has_forbidden_marker, license_from_ccurl
+from .freesound_source import fetch_candidates as _freesound_candidates
+from .openverse_source import fetch_candidates as _openverse_candidates
 
 log = get_logger(__name__)
-
-ALLOWED_LICENSES = {"CC0", "CC-BY", "public-domain"}
-FORBIDDEN_LICENSE_MARKERS = ("NC", "SA", "ND")  # reject if any appear in a license string
 
 JAMENDO_TRACKS_URL = "https://api.jamendo.com/v3.0/tracks/"
 MAX_TRACK_DURATION_S = 170  # stay under qc.py's MAX_DURATION_S=180 after any trim
 
 
-def _license_from_ccurl(ccurl: str | None) -> str | None:
-    """Parses Jamendo's license_ccurl (a creativecommons.org URL) into one of
-    ALLOWED_LICENSES, or None if it's anything else (including any URL this
-    doesn't recognize -- fails safe/rejects rather than guessing)."""
-    if not ccurl:
-        return None
-    path = urlparse(ccurl).path.lower()
-    if "publicdomain/zero" in path:
-        return "CC0"
-    if "/licenses/by/" in path:  # exactly "by", not "by-nc", "by-sa", "by-nd", etc.
-        return "CC-BY"
-    return None
-
-
-def _candidate_tracks(cfg: dict, limit: int) -> list[dict]:
+def _jamendo_candidates(cfg: dict, limit: int) -> list[dict]:
     client_id = os.environ.get("JAMENDO_CLIENT_ID")
     if not client_id:
-        raise RuntimeError(
-            "cc_library: JAMENDO_CLIENT_ID is not set. Free signup at "
-            "https://devportal.jamendo.com, then set it as a repo secret."
-        )
+        log.info("cc_library: JAMENDO_CLIENT_ID not set, skipping this source")
+        return []
     lane_tags = cfg.get("music", {}).get("cc_library", {}).get("tags", "lofi chill ambient instrumental")
     params = {
         "client_id": client_id,
@@ -83,32 +70,56 @@ def _candidate_tracks(cfg: dict, limit: int) -> list[dict]:
         "audioformat": "mp32",
         "order": "popularity_month",
     }
-    resp = requests.get(JAMENDO_TRACKS_URL, params=params, timeout=30)
-    resp.raise_for_status()
-    results = resp.json().get("results", [])
+    try:
+        resp = requests.get(JAMENDO_TRACKS_URL, params=params, timeout=30)
+        resp.raise_for_status()
+        results = resp.json().get("results", [])
+    except Exception:
+        log.exception("cc_library._jamendo_candidates: search request failed")
+        return []
 
     candidates = []
     for item in results:
-        license_str = _license_from_ccurl(item.get("license_ccurl"))
-        if license_str not in ALLOWED_LICENSES:
+        license_url = item.get("license_ccurl")
+        license_str = license_from_ccurl(license_url)
+        if license_str not in {"CC0", "CC-BY"} or has_forbidden_marker(license_url):
             continue
-        if any(marker in (item.get("license_ccurl") or "").upper() for marker in FORBIDDEN_LICENSE_MARKERS):
-            continue  # belt-and-braces: reject if an excluded marker shows up anywhere in the URL
         if not item.get("audiodownload_allowed", False) or not item.get("audiodownload"):
             continue
         candidates.append({
-            "jamendo_id": item.get("id"),
             "title": item.get("name"),
             "artist": item.get("artist_name"),
             "download_url": item["audiodownload"],
             "license": license_str,
-            "license_url": item.get("license_ccurl"),
+            "license_url": license_url,
             "source_url": item.get("shareurl") or item.get("shorturl"),
-            "content_id_free": item.get("content_id_free"),
+            "provider": "jamendo",
         })
         if len(candidates) >= limit:
             break
+    log.info("cc_library._jamendo_candidates: %d/%d candidates passed filters", len(candidates), len(results))
     return candidates
+
+
+def _all_candidates(cfg: dict, limit: int) -> list[dict]:
+    """Gathers candidates from every source, oversampling each so that
+    even if one or two sources are unconfigured/failing, the batch can
+    still reach `limit`. Each source function already never raises."""
+    per_source_limit = max(limit, 8)
+    sources = (_jamendo_candidates, _freesound_candidates, _openverse_candidates)
+    all_candidates: list[dict] = []
+    for source_fn in sources:
+        try:
+            found = source_fn(cfg, per_source_limit)
+        except Exception:
+            log.exception("cc_library._all_candidates: %s raised unexpectedly", source_fn.__module__)
+            found = []
+        all_candidates.extend(found)
+    log.info(
+        "cc_library._all_candidates: %d total candidates across %d sources",
+        len(all_candidates), len(sources),
+    )
+    return all_candidates
 
 
 class CCLibraryProvider(MusicProvider):
@@ -128,12 +139,14 @@ class CCLibraryProvider(MusicProvider):
                         status="complete", meta={"dry_run": True, "tracks": []})
 
         tracks: list[dict] = []
-        try:
-            candidates = _candidate_tracks(self.cfg, batch_spec.tracks_per_batch)
-        except Exception:
-            log.exception("cc_library.submit: fetching candidates failed")
+        candidates = _all_candidates(self.cfg, batch_spec.tracks_per_batch)
+        if not candidates:
+            # Not a hard failure -- e.g. all three sources unconfigured/
+            # down this run. a1c_cc_ingest.py already logs+alerts on an
+            # empty track list, so a "complete" job with 0 tracks is the
+            # right status here (not "failed").
             return Job(job_id=f"cc-{batch_spec.batch_id}", provider=self.name,
-                        status="failed", meta={})
+                        status="complete", meta={"tracks": []})
 
         staging = Path(tempfile.mkdtemp(prefix="cc-library-"))
         for cand in candidates:
@@ -141,7 +154,8 @@ class CCLibraryProvider(MusicProvider):
                 resp = requests.get(cand["download_url"], timeout=60)
                 resp.raise_for_status()
             except Exception:
-                log.warning("cc_library.submit: download failed for jamendo id %s", cand["jamendo_id"])
+                log.warning("cc_library.submit: download failed for %s track %r",
+                            cand.get("provider"), cand.get("title"))
                 continue
 
             raw_path = staging / f"raw-{uuid.uuid4().hex[:8]}.mp3"
@@ -161,14 +175,15 @@ class CCLibraryProvider(MusicProvider):
 
             tracks.append({
                 "path": str(boosted_path),
-                "prompt": f"{cand['artist']} - {cand['title']} (bass-boosted remix)",
-                "model": "cc_library/jamendo+bass_boost",
+                "prompt": f"{cand['artist']} - {cand['title']} (bass-boosted remix, via {cand['provider']})",
+                "model": f"cc_library/{cand['provider']}+bass_boost",
                 "license": cand["license"],
                 "license_url": cand["license_url"],
                 "source_url": cand["source_url"],
                 "attribution": (
                     f"\"{cand['title']}\" by {cand['artist']}, {cand['license']} "
-                    f"({cand['license_url']}), remixed (bass-boosted). Source: {cand['source_url']}"
+                    f"({cand['license_url']}), remixed (bass-boosted), via {cand['provider']}. "
+                    f"Source: {cand['source_url']}"
                 ),
             })
 
