@@ -36,19 +36,41 @@ def _template_fallback(
 ) -> dict:
     """Deterministic, rule-following fallback used whenever Gemini is
     unavailable/rate-limited, and always in dry_run (no network call)."""
-    title = f"{mood.title()} Lofi for {use_case.title()} | {duration_min} min | {series} Vol. {vol}"
+    # Lane names are snake_case identifiers ("deep_focus"), so .title()
+    # put a literal underscore in the public title -- the first published
+    # video went out as "Deep_Focus Lofi for Focus | 60 min | Deep Focus
+    # Vol. 1": an underscore on screen, "Focus" twice, and "Deep Focus"
+    # twice. With a video going out every day, that is the title on every
+    # one of them, and a title that reads as broken costs clicks.
+    mood_label = " ".join(mood.replace("_", " ").replace("-", " ").split()).title()
+    use_label = " ".join(use_case.replace("_", " ").split()).title()
+
+    headline = f"{mood_label} Lofi"
+    if use_label.lower() not in mood_label.lower():
+        headline += f" for {use_label}"
+    # Drop the series name when the lane already says it, so we get
+    # "... | Vol. 3" rather than "Deep Focus ... | Deep Focus Vol. 3".
+    vol_label = f"Vol. {vol}" if series.lower() in mood_label.lower() else f"{series} Vol. {vol}"
+    title = f"{headline} | {duration_min} min | {vol_label}"
+
     desc_lines = [
         # Not "original instrumentals" any more: since A1c, mixes also carry
         # CC-licensed tracks by real artists (credited below), and calling
         # those ours would be a false claim in every description.
-        f"{use_case.title()} companion mix -- calm {mood} instrumentals, no vocals.",
-        "Timestamps below. New volumes every week.",
+        f"{use_label} companion mix -- calm {mood_label.lower()} instrumentals, no vocals.",
+        "Timestamps below. New mixes every day.",
         *_attribution_lines(tracks),
     ]
     return {
         "title": title,
         "description": "\n".join(desc_lines),
-        "tags": [mood, use_case, "lofi", "instrumental"],
+        # dict.fromkeys dedupes while keeping order -- mood and use_case
+        # are the same word whenever the lane is named after its use
+        # ("sleep"/"sleep"), and YouTube ignores a repeated tag anyway.
+        "tags": list(dict.fromkeys([
+            mood_label.lower(), use_label.lower(), "lofi", "instrumental",
+            "study music", "background music",
+        ])),
     }
 
 
