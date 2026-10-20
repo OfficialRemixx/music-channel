@@ -38,7 +38,10 @@ def _template_fallback(
     unavailable/rate-limited, and always in dry_run (no network call)."""
     title = f"{mood.title()} Lofi for {use_case.title()} | {duration_min} min | {series} Vol. {vol}"
     desc_lines = [
-        f"{use_case.title()} companion mix -- {mood} original instrumentals, no vocals.",
+        # Not "original instrumentals" any more: since A1c, mixes also carry
+        # CC-licensed tracks by real artists (credited below), and calling
+        # those ours would be a false claim in every description.
+        f"{use_case.title()} companion mix -- calm {mood} instrumentals, no vocals.",
         "Timestamps below. New volumes every week.",
         *_attribution_lines(tracks),
     ]

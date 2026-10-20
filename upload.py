@@ -147,11 +147,43 @@ def upload_video(video_path: str, metadata: dict, cfg: dict) -> UploadResult:
             reason=f"not_accepted:{failure or rejection or upload_status}",
         )
 
-    # R3: confirm containsSyntheticMedia actually stuck.
+    # R3: containsSyntheticMedia. Set on insert, and if it didn't take,
+    # try once more via videos.update before giving up on it.
     if not status.get("containsSyntheticMedia"):
-        log.error("upload.upload_video: containsSyntheticMedia did not persist for %s "
-                  "(uploadStatus=%s)", video_id, upload_status)
-        return UploadResult(ok=False, video_id=video_id, reason="synthetic_media_flag_missing")
+        try:
+            service.videos().update(
+                part="status",
+                body={"id": video_id, "status": {
+                    "privacyStatus": status.get("privacyStatus", "private"),
+                    "selfDeclaredMadeForKids": False,
+                    "containsSyntheticMedia": True,
+                }},
+            ).execute()
+            recheck = service.videos().list(part="status", id=video_id).execute()
+            items = recheck.get("items", [])
+            status = items[0].get("status", {}) if items else status
+        except HttpError:
+            log.exception("upload.upload_video: videos.update for containsSyntheticMedia failed")
+
+    if not status.get("containsSyntheticMedia"):
+        # Deliberately NOT a failure. A real upload proved why: the video
+        # was accepted and scheduled fine (uploadStatus=uploaded, no
+        # notices), YouTube simply never echoes this field back, and
+        # Studio still asks for the disclosure under "AI use". Returning
+        # ok=False here meant b_build.py exited before saving state, so a
+        # perfectly good video stayed untracked -- absent from
+        # uploaded_videos, invisible to B3's claim gate, and the next run
+        # would have built and uploaded a duplicate of it.
+        #
+        # We've now asserted the flag twice (insert + update), so loudly
+        # flag it for a human instead of throwing the upload away.
+        log.warning(
+            "upload.upload_video: containsSyntheticMedia is not reported back for %s "
+            "(uploadStatus=%s). The upload itself is fine. Set it by hand in YouTube "
+            "Studio > the video > Details > Show more > 'Altered content' / 'AI use'.",
+            video_id, upload_status,
+        )
+        return UploadResult(ok=True, video_id=video_id, reason="uploaded_synthetic_flag_unconfirmed")
 
     return UploadResult(ok=True, video_id=video_id, reason="uploaded")
 

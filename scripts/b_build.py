@@ -10,6 +10,7 @@ requested here -- publishAt is honored only once that audit clears.
 from __future__ import annotations
 
 import sys
+import wave
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -26,6 +27,32 @@ from upload import upload_video
 from visuals import fetch_cover_image, render_video
 
 log = get_logger(__name__)
+
+
+def _mix_duration_min(mix: dict, cfg: dict) -> int:
+    """Length of the mix we actually rendered, for the title.
+
+    Measured from the rendered wav's own header rather than from the
+    tracks' metadata. The old version summed t["details"]["duration_s"],
+    but pool entries carry no "details" key, so the sum was always 0 and
+    every title fell back to mix.minutes[0] -- the first real upload was
+    45:14 and went out titled "60 min". A title that misstates the length
+    is the kind of thing viewers bounce on.
+    """
+    audio_path = mix.get("audio_path")
+    if audio_path:
+        try:
+            with wave.open(audio_path, "rb") as w:
+                seconds = w.getnframes() / float(w.getframerate())
+            if seconds > 0:
+                return max(1, round(seconds / 60))
+        except Exception:
+            log.warning("b_build: could not read duration from %s, falling back",
+                        audio_path, exc_info=True)
+    chapters = mix.get("chapters") or []
+    if chapters:
+        return max(1, round(chapters[-1].get("start_s", 0) / 60)) or cfg["mix"]["minutes"][0]
+    return cfg["mix"]["minutes"][0]
 
 
 def main() -> int:
@@ -48,10 +75,7 @@ def main() -> int:
         alert_failure("B build", "render_video returned no output", cfg=cfg)
         return 1
 
-    total_duration_s = sum(
-        (t.get("details", {}) or {}).get("duration_s") or 0 for t in mix["tracks"]
-    )
-    duration_min = round(total_duration_s / 60) or cfg["mix"]["minutes"][0]
+    duration_min = _mix_duration_min(mix, cfg)
     metadata = generate_metadata(
         mood=cfg["niche"]["lane"],
         use_case="focus",
