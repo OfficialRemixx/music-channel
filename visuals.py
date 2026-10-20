@@ -127,6 +127,20 @@ def render_video(mix: dict, cover: dict | None, cfg: dict | None = None) -> str 
         "-c:v", "libx264", "-tune", "stillimage",
         "-r", "16",
         "-preset", "veryfast", "-crf", "23",
+        # Fit the cover into a standard 1080p 16:9 frame, letterboxing
+        # rather than stretching, and force square pixels.
+        #
+        # This is not cosmetic: libx264 + yuv420p needs EVEN width and
+        # height, and stock photos routinely have odd ones. A real B run
+        # died here on a 'pixabay-2596809.jpg' cover -- ffmpeg exited
+        # non-zero with "Error while filtering: Generic error in an
+        # external library" and wrote no packets. Reproduced locally with
+        # a 1279x853 image (fails) and confirmed this filter encodes the
+        # same image fine (1920x1080 h264). Padding to a fixed size also
+        # means every upload has consistent, YouTube-friendly dimensions
+        # instead of whatever the cover happened to be.
+        "-vf", ("scale=1920:1080:force_original_aspect_ratio=decrease,"
+                "pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1"),
         "-c:a", "aac", "-b:a", "256k",
         "-pix_fmt", "yuv420p",
         "-shortest",
@@ -135,8 +149,18 @@ def render_video(mix: dict, cover: dict | None, cfg: dict | None = None) -> str 
     ]
     try:
         subprocess.run(cmd, check=True, capture_output=True, timeout=3600)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-        log.exception("visuals.render_video: ffmpeg encode failed")
+    except subprocess.CalledProcessError as exc:
+        # ffmpeg's own stderr is the only thing that says WHY. It used to
+        # be captured and then thrown away, so a failure logged nothing
+        # but "encode failed" and a traceback -- useless for diagnosis.
+        stderr = (exc.stderr or b"").decode("utf-8", "replace").strip()
+        log.error(
+            "visuals.render_video: ffmpeg exited %s. Last stderr:\n%s",
+            exc.returncode, "\n".join(stderr.splitlines()[-15:]) or "(empty)",
+        )
+        return None
+    except subprocess.TimeoutExpired:
+        log.exception("visuals.render_video: ffmpeg timed out")
         return None
 
     return str(out_path)
