@@ -48,14 +48,59 @@ def save(state: dict[str, Any]) -> None:
     save_state(STATE_PATH, state)
 
 
+_RESOLVED_SLUG: str | None = None
+
+
 def _dataset_slug() -> str:
+    """The dataset's real `owner/name` ref.
+
+    Asking Kaggle rather than assembling it from KAGGLE_USERNAME, because
+    those two are not the same string. Kaggle lowercases and strips the
+    owner slug: this account's handle is shown as "Official_Remixx" while
+    the dataset actually lives at `officialremixx/music-channel-tracks`.
+    `datasets create` normalises the id it is given, so creation always
+    worked -- but every later `datasets download` asked for the
+    un-normalised ref and got a 404. Three consecutive A1c runs built 24
+    tracks each and saved none of them because of it, and before the
+    guard in sync_tracks_to_kaggle_dataset existed, that same 404 is what
+    sent the code down the dataset-replacing `create` path.
+
+    Falls back to the env-derived ref if the lookup fails, so a Kaggle
+    outage degrades to the old behaviour instead of breaking outright.
+    """
+    global _RESOLVED_SLUG
+    if _RESOLVED_SLUG:
+        return _RESOLVED_SLUG
+
     username = os.environ.get("KAGGLE_USERNAME")
     if not username:
         raise RuntimeError(
             "storage._dataset_slug: KAGGLE_USERNAME is not set -- needed to address "
             "'<username>/music-channel-tracks', same requirement as kaggle_acestep.py's kernel id."
         )
-    return f"{username}/{KAGGLE_DATASET_SLUG_NAME}"
+    fallback = f"{username}/{KAGGLE_DATASET_SLUG_NAME}"
+
+    try:
+        result = subprocess.run(
+            ["kaggle", "datasets", "list", "--mine", "-s", KAGGLE_DATASET_SLUG_NAME, "--csv"],
+            capture_output=True, text=True, timeout=120,
+        )
+        if result.returncode == 0:
+            for line in result.stdout.splitlines():
+                ref = line.split(",", 1)[0].strip()
+                if ref.endswith("/" + KAGGLE_DATASET_SLUG_NAME):
+                    if ref != fallback:
+                        log.info("storage._dataset_slug: using Kaggle's own ref %s "
+                                 "(KAGGLE_USERNAME would have given %s)", ref, fallback)
+                    _RESOLVED_SLUG = ref
+                    return ref
+        log.info("storage._dataset_slug: dataset not found in `datasets list --mine`, "
+                 "falling back to %s (expected on the very first run)", fallback)
+    except Exception:
+        log.warning("storage._dataset_slug: lookup failed, falling back to %s",
+                    fallback, exc_info=True)
+
+    return fallback
 
 
 def _download_existing_dataset(dest: Path, attempts: int = 3) -> bool:
