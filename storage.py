@@ -231,8 +231,36 @@ def commit_and_push(message: str) -> bool:
             log.info("storage.commit_and_push: nothing changed under storage/, skipping commit")
             return False
         subprocess.run(["git", "commit", "-m", message], check=True, cwd=REPO_ROOT)
-        subprocess.run(["git", "push"], check=True, cwd=REPO_ROOT)
-        return True
     except subprocess.CalledProcessError:
-        log.exception("storage.commit_and_push: git commit/push failed")
+        log.exception("storage.commit_and_push: git commit failed")
         return False
+
+    # Push with rebase-and-retry. A plain push loses the entire run when
+    # anything else pushed meanwhile: a real A1c run built 24 tracks,
+    # synced their audio to Kaggle, committed -- and then the push was
+    # rejected ("fetch first") because another commit had landed during
+    # the 13 minutes it was working. The tracks were gone, while their
+    # audio stayed in the dataset as unreferenced files.
+    #
+    # This is not a rare race. A2 pushes state every 30 minutes, A1/A1c/
+    # B/C/D all push too, and B now runs unattended -- overlapping pushes
+    # are the normal case, not the exception. Rebasing is safe here
+    # because every one of these jobs only ever appends to its own files
+    # under storage/.
+    for attempt in range(1, 4):
+        push = subprocess.run(["git", "push"], cwd=REPO_ROOT,
+                              capture_output=True, text=True)
+        if push.returncode == 0:
+            return True
+        log.info("storage.commit_and_push: push rejected (attempt %d/3), rebasing onto "
+                 "origin and retrying: %s", attempt, push.stderr.strip()[:200])
+        rebase = subprocess.run(["git", "pull", "--rebase", "--autostash"],
+                                cwd=REPO_ROOT, capture_output=True, text=True)
+        if rebase.returncode != 0:
+            subprocess.run(["git", "rebase", "--abort"], cwd=REPO_ROOT,
+                           capture_output=True, text=True)
+            log.error("storage.commit_and_push: rebase failed, giving up: %s",
+                      rebase.stderr.strip()[:300])
+            return False
+    log.error("storage.commit_and_push: still could not push after 3 attempts")
+    return False
