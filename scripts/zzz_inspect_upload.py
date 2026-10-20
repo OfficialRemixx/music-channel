@@ -35,17 +35,38 @@ def main() -> int:
         print("  title :", item["snippet"]["title"])
         print("  url   : https://www.youtube.com/channel/" + item["id"])
 
-    print(f"\n=== VIDEO {VIDEO_ID} ===")
-    resp = service.videos().list(part="status,snippet,contentDetails", id=VIDEO_ID).execute()
+    # Don't rely on a video id transcribed from a log screenshot --
+    # YouTube ids mix l/I/1 and are case sensitive. Ask the channel what
+    # it actually holds.
+    print("\n=== RECENT UPLOADS ON THIS CHANNEL ===")
+    uploads_playlist = None
+    for item in ch.get("items", []):
+        uploads_playlist = item["contentDetails"]["relatedPlaylists"]["uploads"]
+    found_ids = []
+    if uploads_playlist:
+        pl = service.playlistItems().list(
+            part="snippet,contentDetails", playlistId=uploads_playlist, maxResults=10
+        ).execute()
+        for entry in pl.get("items", []):
+            vid = entry["contentDetails"]["videoId"]
+            found_ids.append(vid)
+            print(f"  {vid}  {entry['snippet']['title'][:70]}")
+    if not found_ids:
+        print("  (no uploads found on this channel at all)")
+
+    target = VIDEO_ID if VIDEO_ID in found_ids else (found_ids[0] if found_ids else VIDEO_ID)
+    print(f"\n=== VIDEO {target} ===")
+    resp = service.videos().list(part="status,snippet,contentDetails", id=target).execute()
     items = resp.get("items", [])
     if not items:
         print("  NOT FOUND (wrong id, or not visible to these credentials)")
         return 0
+    VIDEO_ID_RESOLVED = target
 
     video = items[0]
     print("  title       :", video["snippet"]["title"])
     print("  published   :", video["snippet"].get("publishedAt"))
-    print("  url         : https://www.youtube.com/watch?v=" + VIDEO_ID)
+    print("  url         : https://www.youtube.com/watch?v=" + VIDEO_ID_RESOLVED)
     print("\n  full status block as returned by the API:")
     print(json.dumps(video["status"], indent=4))
 
