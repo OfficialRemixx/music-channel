@@ -20,6 +20,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -57,22 +58,35 @@ def _dataset_slug() -> str:
     return f"{username}/{KAGGLE_DATASET_SLUG_NAME}"
 
 
-def _download_existing_dataset(dest: Path) -> bool:
-    """Best-effort download of every file currently in the tracks dataset
-    into dest. Returns False (not an error) the first time ever, when the
-    dataset doesn't exist yet."""
+def _download_existing_dataset(dest: Path, attempts: int = 3) -> bool:
+    """Downloads every file currently in the tracks dataset into dest.
+
+    Retries, because a transient failure here is DESTRUCTIVE: the caller
+    uses the result to decide between "version" (keeps existing files)
+    and "create" (replaces the dataset wholesale). See
+    sync_tracks_to_kaggle_dataset for the incident this caused.
+
+    Returns False both when the dataset genuinely doesn't exist yet and
+    when the download failed -- the caller MUST distinguish those two
+    using state["kaggle_dataset_created"], never treat False as "safe to
+    create".
+    """
     dest.mkdir(parents=True, exist_ok=True)
-    result = subprocess.run(
-        ["kaggle", "datasets", "download", "-d", _dataset_slug(), "-p", str(dest), "--unzip"],
-        capture_output=True, text=True, timeout=600,
-    )
-    if result.returncode != 0:
-        log.info(
-            "storage._download_existing_dataset: no existing dataset yet, or download failed (%s)",
-            result.stderr.strip()[:300],
+    for attempt in range(1, attempts + 1):
+        result = subprocess.run(
+            ["kaggle", "datasets", "download", "-d", _dataset_slug(), "-p", str(dest), "--unzip"],
+            capture_output=True, text=True, timeout=600,
         )
-        return False
-    return True
+        if result.returncode == 0:
+            return True
+        log.info(
+            "storage._download_existing_dataset: attempt %d/%d failed -- dataset may not exist "
+            "yet, or this is transient (%s)",
+            attempt, attempts, result.stderr.strip()[:300],
+        )
+        if attempt < attempts:
+            time.sleep(5 * attempt)
+    return False
 
 
 def store_track_file(track: dict[str, Any]) -> dict[str, Any]:
@@ -110,7 +124,36 @@ def sync_tracks_to_kaggle_dataset(new_files: list[Path], message: str, state: di
         return False
 
     staging = Path(tempfile.mkdtemp(prefix="kaggle-tracks-sync-"))
-    existed = state.get("kaggle_dataset_created") and _download_existing_dataset(staging)
+
+    # REAL DATA LOSS, 2026-10-20: this used to be
+    #     existed = state.get("kaggle_dataset_created") and _download_existing_dataset(staging)
+    # so ANY download failure (a transient 404 from DownloadDataset showed
+    # up repeatedly in real job logs) silently set existed=False and sent
+    # us down the `create` path -- and `kaggle datasets create` REPLACES
+    # the dataset with just the folder's contents. Every previously stored
+    # track's audio was destroyed, the command exited 0 so sync reported
+    # success, and nothing rolled back. The result: track_pool held 68
+    # entries while the dataset held 41 files, and B aborted the first
+    # time the mix touched one of the 27 orphans.
+    #
+    # The two cases must stay separate: a dataset that has never been
+    # created is the ONLY case where `create` is safe. If we believe it
+    # exists, a failed download is a hard error -- the caller rolls back
+    # and alerts -- never a reason to overwrite it.
+    already_created = bool(state.get("kaggle_dataset_created"))
+    if already_created:
+        if not _download_existing_dataset(staging):
+            log.error(
+                "storage.sync_tracks_to_kaggle_dataset: dataset %s is marked created but could "
+                "not be downloaded. Refusing to push, because creating it fresh would delete "
+                "every track already stored there.",
+                _dataset_slug(),
+            )
+            return False
+        existed = True
+    else:
+        existed = False
+
     for f in new_files:
         shutil.copyfile(f, staging / f.name)
 
