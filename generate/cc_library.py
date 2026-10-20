@@ -40,7 +40,7 @@ from pathlib import Path
 import requests
 
 from common.logging_setup import get_logger
-from remix import bass_boost_track
+from remix import analyze_track, bass_boost_track, mashup_tracks, pair_for_mashup
 
 from .base import BatchSpec, Job, MusicProvider
 from .cc_common import (
@@ -74,7 +74,12 @@ def _jamendo_candidates(cfg: dict, limit: int) -> list[dict]:
         "ccnc": "0",  # exclude non-commercial-only
         "ccnd": "0",  # exclude no-derivatives-only (we remix, so this matters)
         "ccsa": "0",  # exclude share-alike-only
-        "include": "musicinfo",
+        # `stats` carries the real popularity numbers (rate_listened_total,
+        # rate_downloads_total) so we can record how popular a track we
+        # actually picked. Verified live 2026-10-20: ordering by
+        # popularity_month returns tracks with hundreds of thousands of
+        # listens (e.g. 888,901 / 430,509) instead of obscure uploads.
+        "include": "musicinfo stats",
         "audioformat": "mp32",
         "order": "popularity_month",
         # Verified live 2026-10-19: without this, Jamendo happily returns
@@ -107,6 +112,8 @@ def _jamendo_candidates(cfg: dict, limit: int) -> list[dict]:
             "license_url": license_url,
             "source_url": item.get("shareurl") or item.get("shorturl"),
             "provider": "jamendo",
+            "popularity": (item.get("stats") or {}).get("rate_listened_total"),
+            "popularity_unit": "listens",
         })
         if len(candidates) >= limit:
             break
@@ -185,7 +192,16 @@ class CCLibraryProvider(MusicProvider):
             return Job(job_id=f"cc-{batch_spec.batch_id}", provider=self.name,
                         status="complete", meta={"tracks": []})
 
+        cc_cfg = self.cfg.get("music", {}).get("cc_library", {})
+        boost_db = cc_cfg.get("bass_boost_db", 6.0)
+        mashup_share = float(cc_cfg.get("mashup_share", 0.0) or 0.0)
+
         staging = Path(tempfile.mkdtemp(prefix="cc-library-"))
+
+        # Phase 1: fetch and trim everything first. Mashups need two tracks
+        # in hand (and their key/BPM) before anything can be rendered, so
+        # the download pass can't also be the remix pass any more.
+        prepared: list[tuple[dict, Path]] = []
         for cand in candidates:
             try:
                 resp = requests.get(cand["download_url"], timeout=60)
@@ -200,32 +216,73 @@ class CCLibraryProvider(MusicProvider):
 
             # Trim to stay under qc.py's MAX_DURATION_S before remixing --
             # done here (not in remix.py) since it's about fitting the QC
-            # contract, not part of the bass-boost transform itself.
+            # contract, not part of the transform itself.
             trimmed_path = staging / f"trimmed-{raw_path.stem}.wav"
             if not _trim_track(str(raw_path), str(trimmed_path), MAX_TRACK_DURATION_S):
                 continue
+            prepared.append((cand, trimmed_path))
 
-            boost_db = self.cfg.get("music", {}).get("cc_library", {}).get("bass_boost_db", 6.0)
-            boosted_path = staging / f"boosted-{raw_path.stem}.wav"
-            if not bass_boost_track(str(trimmed_path), str(boosted_path), boost_db=boost_db):
-                continue
+        # Phase 2: pick which ones get blended. Only same-key / close-BPM
+        # pairs are eligible (see remix.pair_for_mashup) -- everything
+        # else, and everything over the share, gets the plain bass-boost.
+        mashed: set[int] = set()
+        pairs: list[tuple[int, int]] = []
+        if mashup_share > 0 and len(prepared) >= 2:
+            analyzed = [(i, *analyze_track(str(p))) for i, (_, p) in enumerate(prepared)]
+            wanted = int(len(prepared) * mashup_share) // 2
+            pairs = pair_for_mashup(analyzed)[:wanted]
+            mashed = {i for pair in pairs for i in pair}
+            log.info("cc_library.submit: %d mashup pair(s) from %d prepared track(s)",
+                     len(pairs), len(prepared))
 
-            tracks.append({
-                "path": str(boosted_path),
-                "prompt": f"{cand['artist']} - {cand['title']} (bass-boosted remix, via {cand['provider']})",
-                "model": f"cc_library/{cand['provider']}+bass_boost",
+        def _entry(cand: dict, path: Path, kind: str, extra: dict | None = None) -> dict:
+            attribution = (
+                f"\"{cand['title']}\" by {cand['artist']}, {cand['license']} "
+                f"({cand['license_url']}), remixed ({kind}), via {cand['provider']}. "
+                f"Source: {cand['source_url']}"
+            )
+            if extra:
+                attribution += (
+                    f" Blended with \"{extra['title']}\" by {extra['artist']}, "
+                    f"{extra['license']} ({extra['license_url']}), via {extra['provider']}. "
+                    f"Source: {extra['source_url']}"
+                )
+            return {
+                "path": str(path),
+                "prompt": f"{cand['artist']} - {cand['title']} ({kind}, via {cand['provider']})",
+                "model": f"cc_library/{cand['provider']}+{kind.replace(' ', '_')}",
                 "license": cand["license"],
                 "license_url": cand["license_url"],
                 "source_url": cand["source_url"],
-                "attribution": (
-                    f"\"{cand['title']}\" by {cand['artist']}, {cand['license']} "
-                    f"({cand['license_url']}), remixed (bass-boosted), via {cand['provider']}. "
-                    f"Source: {cand['source_url']}"
-                ),
-            })
+                "popularity": cand.get("popularity"),
+                "popularity_unit": cand.get("popularity_unit"),
+                "attribution": attribution,
+            }
 
-        log.info("cc_library.submit: prepared %d/%d candidate tracks for batch %s",
-                  len(tracks), len(candidates), batch_spec.batch_id)
+        for lead_i, bed_i in pairs:
+            lead_cand, lead_path = prepared[lead_i]
+            bed_cand, bed_path = prepared[bed_i]
+            out_path = staging / f"mashup-{lead_path.stem}.wav"
+            if not mashup_tracks(str(lead_path), str(bed_path), str(out_path)):
+                mashed.discard(lead_i)  # fall back to bass-boosting them
+                mashed.discard(bed_i)
+                continue
+            # BOTH sources are credited: a blend is a derivative of two
+            # licensed works, and CC-BY attribution isn't optional.
+            tracks.append(_entry(lead_cand, out_path, "mashup", extra=bed_cand))
+
+        for i, (cand, trimmed_path) in enumerate(prepared):
+            if i in mashed:
+                continue
+            boosted_path = staging / f"boosted-{trimmed_path.stem}.wav"
+            if not bass_boost_track(str(trimmed_path), str(boosted_path), boost_db=boost_db):
+                continue
+            tracks.append(_entry(cand, boosted_path, "bass-boosted"))
+
+        log.info("cc_library.submit: prepared %d/%d candidate tracks for batch %s "
+                 "(%d mashup, %d bass-boosted)",
+                 len(tracks), len(candidates), batch_spec.batch_id,
+                 len(pairs), len(tracks) - len(pairs))
         return Job(job_id=f"cc-{batch_spec.batch_id}", provider=self.name,
                     status="complete", meta={"tracks": tracks})
 

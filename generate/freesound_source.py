@@ -98,7 +98,13 @@ def fetch_candidates(cfg: dict, limit: int) -> list[dict]:
             "query": tag,
             "token": api_key,
             "filter": _FILTER,
-            "fields": "id,name,username,license,duration,previews",
+            "fields": "id,name,username,license,duration,previews,num_downloads",
+            # Most-downloaded first: this is "trending, but inside a free
+            # library". Verified live 2026-10-20 -- the default ordering
+            # returned tracks with ~400-800 downloads, downloads_desc
+            # returns 4,800-5,900, so the same query yields the library's
+            # genuinely popular material instead of obscure uploads.
+            "sort": "downloads_desc",
             "page_size": 50,
         }
         results = fetch_results_with_retry(FREESOUND_SEARCH_URL, params)
@@ -133,6 +139,8 @@ def fetch_candidates(cfg: dict, limit: int) -> list[dict]:
                 "license_url": license_url,
                 "source_url": f"https://freesound.org/people/{username}/sounds/{sound_id}/",
                 "provider": "freesound",
+                "popularity": item.get("num_downloads"),
+                "popularity_unit": "downloads",
             })
 
     log.info("freesound_source: %d/%d candidates passed filters across %d tag(s)",

@@ -60,6 +60,19 @@ music:
     tracks_per_batch: 26
     tags: "lofi chill ambient instrumental"
     bass_boost_db: 6.0
+    # Fraction of each batch turned into mashups (two tracks blended)
+    # instead of plain bass-boosts. Only same-key / close-BPM pairs are
+    # ever blended -- see remix.pair_for_mashup -- so the real number is
+    # usually lower than this, and that's deliberate: a clashing blend
+    # would pass QC (which checks level, not dissonance) and end up in a
+    # published mix. 0 disables mashups entirely.
+    mashup_share: 0.4
+    # Both sources are asked for their most-played/most-downloaded tracks
+    # first, so batches draw on what's genuinely popular inside these free
+    # libraries rather than random uploads. Jamendo: order=popularity_month
+    # (live check 2026-10-20 returned tracks with 400k-900k listens).
+    # Freesound: sort=downloads_desc (4.8k-5.9k downloads vs ~400-800 on
+    # the default ordering).
 
 qc:
   pass_rate_alert_below: 0.5   # a batch's QC pass-rate below this pauses new A1 submissions (circuit breaker)
