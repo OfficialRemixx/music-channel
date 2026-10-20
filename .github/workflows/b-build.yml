@@ -1,10 +1,26 @@
-# Section 6: render + upload private, then wait at the approval Environment.
+# Section 6: build the mix, render it, and upload it scheduled-public.
 # Real as of P1/P2/P3: scripts/b_build.py (mix.py + visuals.py + upload.py).
+#
+# Fully automatic as of 2026-10-20, at the owner's request ("100% automation,
+# a to z publish tak"), after a manual run uploaded cleanly end to end
+# (video 9zXUG9tjWQA). Two deliberate changes went with that:
+#
+#   - The cron below is enabled, at the cadence_ramp's starting rate of
+#     2 long videos/week. 10:00 UTC lands before the 13:00 UTC publish
+#     slot, so a build goes out the same evening IST rather than waiting
+#     a day.
+#   - The approval-gate job is gone. It existed so a human saw every
+#     video before it went public; with it in place nothing publishes
+#     unattended, which is exactly what the owner asked to remove. The
+#     remaining safety net is B3 (claim gate), now also on cron: it runs
+#     every 4 hours and cancels a scheduled publish if YouTube reports a
+#     copyright claim or rejection before the slot arrives.
 name: B build
 
 on:
   workflow_dispatch: {}
-  # schedule: enable per cadence_ramp once a verified manual run uploads cleanly
+  schedule:
+    - cron: "0 10 * * 2,6"   # 2x/week (Tue + Sat), per cadence_ramp
 
 permissions:
   contents: write
@@ -14,15 +30,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  approval-gate:
-    runs-on: ubuntu-latest
-    environment: production # Section 5.8: requires a human reviewer set up on this Environment
-    timeout-minutes: 60
-    steps:
-      - run: echo "Reviewer approved -- proceeding to build+upload."
-
   build:
-    needs: approval-gate
     runs-on: ubuntu-latest
     timeout-minutes: 360 # 6h job limit (Section 6)
     steps:

@@ -82,7 +82,13 @@ mix:
   minutes: [60, 120]
   crossfade_s: [6, 12]
 
-approval_mode: required   # required | veto_window | off
+# off as of 2026-10-20: the owner asked for end-to-end automation through
+# publish, so there is no human approval step any more. B3's claim gate
+# (now on a 4-hourly cron) is what still stands between a copyright claim
+# and a live video.
+# Quoted deliberately: bare `off` is a BOOLEAN in YAML, so this would load
+# as False rather than the string this field is documented to take.
+approval_mode: "off"   # required | veto_window | off
 storage: kaggle_dataset    # gdrive | hf_dataset | kaggle_dataset -- real as of 2026-10-15, see storage.py
 
 weights:
