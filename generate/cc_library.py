@@ -66,12 +66,36 @@ def _jamendo_candidates(cfg: dict, limit: int) -> list[dict]:
         log.info("cc_library: JAMENDO_CLIENT_ID not set, skipping this source")
         return []
     tags = rotating_tags(cfg)
+    # Split the batch between vocal and instrumental tracks. Jamendo's
+    # vocal side is, if anything, the more popular half -- verified live
+    # 2026-10-20 on the same query: "Leave and Never Look Back" 1,881,559
+    # listens, "Fire" 1,270,247, "To Be Alive" 855,834, all CC-BY, i.e.
+    # licensed for exactly this kind of reuse. vocal_share 0.5 gives the
+    # 1:1 mix asked for; 0 keeps the old instrumental-only behaviour.
+    cc_cfg = cfg.get("music", {}).get("cc_library", {})
+    vocal_share = min(max(float(cc_cfg.get("vocal_share", 0.0) or 0.0), 0.0), 1.0)
+    want_vocal = int(round(limit * vocal_share))
+    wanted = [("vocal", want_vocal), ("instrumental", limit - want_vocal)]
+
+    candidates: list[dict] = []
+    for mode, mode_limit in wanted:
+        if mode_limit <= 0:
+            continue
+        candidates.extend(_jamendo_query(cfg, client_id, tags, mode, mode_limit))
+    log.info("cc_library._jamendo_candidates: %d candidate(s) (%d vocal / %d instrumental requested)",
+             len(candidates), want_vocal, limit - want_vocal)
+    return candidates
+
+
+def _jamendo_query(
+    cfg: dict, client_id: str, tags: list[str], vocalinstrumental: str, limit: int
+) -> list[dict]:
     params = {
         "client_id": client_id,
         "format": "json",
         "limit": min(limit * 3, 200),  # over-fetch: some will fail license/download checks
         "fuzzytags": " ".join(tags),
-        "vocalinstrumental": "instrumental",
+        "vocalinstrumental": vocalinstrumental,
         "ccnc": "0",  # exclude non-commercial-only
         "ccnd": "0",  # exclude no-derivatives-only (we remix, so this matters)
         "ccsa": "0",  # exclude share-alike-only
@@ -94,7 +118,7 @@ def _jamendo_candidates(cfg: dict, limit: int) -> list[dict]:
     # cc_common.fetch_results_with_retry's docstring for the measurements.
     results = fetch_results_with_retry(JAMENDO_TRACKS_URL, params)
     if not results:
-        log.warning("cc_library._jamendo_candidates: no results after retries")
+        log.warning("cc_library._jamendo_query: no %s results after retries", vocalinstrumental)
         return []
 
     candidates = []
@@ -113,12 +137,14 @@ def _jamendo_candidates(cfg: dict, limit: int) -> list[dict]:
             "license_url": license_url,
             "source_url": item.get("shareurl") or item.get("shorturl"),
             "provider": "jamendo",
+            "vocal": vocalinstrumental == "vocal",
             "popularity": (item.get("stats") or {}).get("rate_listened_total"),
             "popularity_unit": "listens",
         })
         if len(candidates) >= limit:
             break
-    log.info("cc_library._jamendo_candidates: %d/%d candidates passed filters", len(candidates), len(results))
+    log.info("cc_library._jamendo_query: %s -- %d/%d candidates passed filters",
+             vocalinstrumental, len(candidates), len(results))
     return candidates
 
 

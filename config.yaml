@@ -94,6 +94,15 @@ music:
       - downtempo
       - beats
     tags_per_run: 4
+    # 1:1 vocal / instrumental, as asked. Jamendo exposes an explicit
+    # vocal-vs-instrumental flag and its vocal side is the more popular
+    # half -- live check 2026-10-20 on the same query returned CC-BY
+    # tracks with 1.88M, 1.27M and 856k listens. These are independent
+    # artists who licensed reuse, NOT label-owned chart songs: remixing
+    # those would draw a Content ID claim the day it published, and with
+    # B now publishing unattended a strike would surface days late.
+    # Freesound has no such flag, so its share stays mixed either way.
+    vocal_share: 0.5
     bass_boost_db: 6.0
     # Fraction of each batch turned into mashups (two tracks blended)
     # instead of plain bass-boosts. Only same-key / close-BPM pairs are
