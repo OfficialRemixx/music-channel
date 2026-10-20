@@ -107,11 +107,50 @@ def upload_video(video_path: str, metadata: dict, cfg: dict) -> UploadResult:
         log.exception("upload.upload_video: YouTube API upload failed")
         return UploadResult(ok=False, video_id=None, reason="upload_http_error")
 
-    # R3: confirm containsSyntheticMedia actually stuck.
-    check = service.videos().list(part="status", id=video_id).execute()
+    # Check whether YouTube actually ACCEPTED the video before checking
+    # anything about its metadata. Ordering matters: this used to go
+    # straight to the containsSyntheticMedia check, so when YouTube threw
+    # the upload away the only thing logged was "containsSyntheticMedia
+    # did not persist" -- which sent us hunting a metadata bug when the
+    # real message, visible only in YouTube Studio, was "Processing
+    # abandoned: video is too long" (an unverified account is capped at
+    # 15 minutes, and these mixes are 60-120). Surface the real reason.
+    check = service.videos().list(
+        part="status,processingDetails", id=video_id
+    ).execute()
     items = check.get("items", [])
-    if not items or not items[0]["status"].get("containsSyntheticMedia"):
-        log.error("upload.upload_video: containsSyntheticMedia did not persist for %s", video_id)
+    if not items:
+        log.error(
+            "upload.upload_video: %s is gone right after upload -- YouTube discarded it. "
+            "Check Studio > Content for a notice (e.g. 'Processing abandoned: video is too "
+            "long', which means the channel needs phone verification at youtube.com/verify "
+            "to exceed the 15-minute limit).",
+            video_id,
+        )
+        return UploadResult(ok=False, video_id=video_id, reason="discarded_by_youtube")
+
+    status = items[0].get("status", {})
+    processing = items[0].get("processingDetails", {})
+    upload_status = status.get("uploadStatus")
+    failure = status.get("failureReason") or processing.get("processingFailureReason")
+    rejection = status.get("rejectionReason")
+
+    if upload_status in ("failed", "rejected") or failure or rejection:
+        log.error(
+            "upload.upload_video: YouTube did not accept %s -- uploadStatus=%s "
+            "failureReason=%s rejectionReason=%s processingStatus=%s",
+            video_id, upload_status, failure, rejection,
+            processing.get("processingStatus"),
+        )
+        return UploadResult(
+            ok=False, video_id=video_id,
+            reason=f"not_accepted:{failure or rejection or upload_status}",
+        )
+
+    # R3: confirm containsSyntheticMedia actually stuck.
+    if not status.get("containsSyntheticMedia"):
+        log.error("upload.upload_video: containsSyntheticMedia did not persist for %s "
+                  "(uploadStatus=%s)", video_id, upload_status)
         return UploadResult(ok=False, video_id=video_id, reason="synthetic_media_flag_missing")
 
     return UploadResult(ok=True, video_id=video_id, reason="uploaded")
