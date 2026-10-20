@@ -15,6 +15,7 @@ means the two can't disagree again.
 from __future__ import annotations
 
 import time
+from datetime import date
 from urllib.parse import urlparse
 
 import requests
@@ -43,6 +44,32 @@ MAX_SOURCE_DURATION_S = _QC_MAX_DURATION_S * 1.5
 
 ALLOWED_LICENSES = {"CC0", "CC-BY", "public-domain"}
 FORBIDDEN_LICENSE_MARKERS = ("NC", "SA", "ND")  # reject if any appear in a license string
+
+
+def rotating_tags(cfg: dict, today: date | None = None) -> list[str]:
+    """The tag set for this run, rotated by date.
+
+    Every source is asked for its most popular tracks, which means an
+    identical query returns identical tracks -- fine weekly, useless
+    daily: the second run onward would fetch the same tracks and dedupe
+    would reject all of them. Rotating which tags we ask about keeps each
+    run at the TOP of a different popularity ranking, which is where the
+    genuinely popular material is (deep paging just reaches obscure
+    tracks -- measured on Jamendo: 400k-900k listens at offset 0, ~500 at
+    offset 78).
+
+    Falls back to the flat `tags` string when no tag_pool is configured.
+    """
+    cc = cfg.get("music", {}).get("cc_library", {})
+    pool = cc.get("tag_pool") or []
+    if not pool:
+        return [t for t in (cc.get("tags") or "").split() if t]
+
+    per_run = max(1, int(cc.get("tags_per_run", 4)))
+    day = (today or date.today()).toordinal()
+    start = (day * per_run) % len(pool)
+    # Wrap around so the window is always per_run long.
+    return [pool[(start + i) % len(pool)] for i in range(min(per_run, len(pool)))]
 
 
 def license_from_ccurl(ccurl: str | None) -> str | None:

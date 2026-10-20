@@ -5,10 +5,11 @@
 # a to z publish tak"), after a manual run uploaded cleanly end to end
 # (video 9zXUG9tjWQA). Two deliberate changes went with that:
 #
-#   - The cron below is enabled, at the cadence_ramp's starting rate of
-#     2 long videos/week. 10:00 UTC lands before the 13:00 UTC publish
-#     slot, so a build goes out the same evening IST rather than waiting
-#     a day.
+#   - The cron below is enabled. Daily since 2026-10-20 ("roz minimum 1
+#     song toh dalna hi chahiye"): 10:00 UTC lands before the 13:00 UTC
+#     publish slot, so each build reaches viewers the same evening IST
+#     (18:30) rather than waiting a day. A1c runs at 05:00 UTC so the
+#     pool is topped up before the build starts.
 #   - The approval-gate job is gone. It existed so a human saw every
 #     video before it went public; with it in place nothing publishes
 #     unattended, which is exactly what the owner asked to remove. The
@@ -20,7 +21,7 @@ name: B build
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: "0 10 * * 2,6"   # 2x/week (Tue + Sat), per cadence_ramp
+    - cron: "0 10 * * *"   # daily; publishes at the 13:00 UTC slot (18:30 IST)
 
 permissions:
   contents: write

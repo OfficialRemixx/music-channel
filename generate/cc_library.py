@@ -49,6 +49,7 @@ from .cc_common import (
     fetch_results_with_retry,
     has_forbidden_marker,
     license_from_ccurl,
+    rotating_tags,
 )
 from .freesound_source import fetch_candidates as _freesound_candidates
 from .openverse_source import fetch_candidates as _openverse_candidates
@@ -64,12 +65,12 @@ def _jamendo_candidates(cfg: dict, limit: int) -> list[dict]:
     if not client_id:
         log.info("cc_library: JAMENDO_CLIENT_ID not set, skipping this source")
         return []
-    lane_tags = cfg.get("music", {}).get("cc_library", {}).get("tags", "lofi chill ambient instrumental")
+    tags = rotating_tags(cfg)
     params = {
         "client_id": client_id,
         "format": "json",
         "limit": min(limit * 3, 200),  # over-fetch: some will fail license/download checks
-        "fuzzytags": lane_tags,
+        "fuzzytags": " ".join(tags),
         "vocalinstrumental": "instrumental",
         "ccnc": "0",  # exclude non-commercial-only
         "ccnd": "0",  # exclude no-derivatives-only (we remix, so this matters)

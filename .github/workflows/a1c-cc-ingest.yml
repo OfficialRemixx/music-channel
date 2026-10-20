@@ -13,7 +13,7 @@ name: A1c cc-library ingest
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: "0 9 * * 1,3,5"   # 3x/week
+    - cron: "0 5 * * *"   # daily, well before B's 10:00 UTC build
 
 permissions:
   contents: write

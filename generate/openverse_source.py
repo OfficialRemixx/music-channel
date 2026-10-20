@@ -58,6 +58,7 @@ from .cc_common import (
     fetch_results_with_retry,
     has_forbidden_marker,
     license_from_ccurl,
+    rotating_tags,
 )
 
 log = get_logger(__name__)
@@ -125,8 +126,7 @@ def fetch_candidates(cfg: dict, limit: int) -> list[dict]:
     if not token:
         return []
 
-    lane_tags = cfg.get("music", {}).get("cc_library", {}).get("tags", "lofi chill ambient instrumental")
-    tags = [t for t in lane_tags.split() if t]
+    tags = rotating_tags(cfg)
     headers = {"Authorization": f"Bearer {token}"}
 
     candidates: list[dict] = []

@@ -43,6 +43,7 @@ from .cc_common import (
     fetch_results_with_retry,
     has_forbidden_marker,
     license_from_ccurl,
+    rotating_tags,
 )
 
 log = get_logger(__name__)
@@ -82,11 +83,12 @@ def fetch_candidates(cfg: dict, limit: int) -> list[dict]:
         log.info("freesound_source: FREESOUND_API_KEY not set, skipping this source")
         return []
 
-    lane_tags = cfg.get("music", {}).get("cc_library", {}).get("tags", "lofi chill ambient instrumental")
     # One tag per request: confirmed on the live API 2026-10-19 that
     # Freesound ANDs a multi-word query -- the full tag string returned 2
-    # results where a single tag ("lofi") returned 1589.
-    tags = [t for t in lane_tags.split() if t]
+    # results where a single tag ("lofi") returned 1589. Which tags are
+    # asked about rotates by date, so daily runs don't keep re-fetching
+    # the same most-downloaded tracks (see cc_common.rotating_tags).
+    tags = rotating_tags(cfg)
 
     candidates: list[dict] = []
     seen_ids: set[object] = set()

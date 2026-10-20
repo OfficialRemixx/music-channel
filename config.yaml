@@ -11,9 +11,12 @@ public_text:
   ai_wording: none
   description_disclosure_line: false
 
+# Declarative only -- no code reads this; the real cadence is the cron in
+# b-build.yml, now daily at the owner's request ("roz minimum 1 song").
+# Shorts are NOT built: there is no shorts workflow, so shorts_per_week
+# has never produced anything.
 cadence_ramp:
-  - { weeks: 2, long_per_week: 2, shorts_per_week: 3 }
-  - { weeks: 4, long_per_week: 3, shorts_per_week: 7 }
+  - { weeks: 52, long_per_week: 7, shorts_per_week: 0 }
 
 publish_slots_utc: ["13:00", "00:00"]
 
@@ -32,7 +35,13 @@ music:
   trend_share: 0.5          # fraction of a batch's prompts that get a trending word mixed in
   fixed_share: 0.5          # fraction that stay on evergreen genre/mood/instrument combos
   keep_ratio: 0.33          # NOT YET enforced anywhere in code -- see system-overview doc
-  max_track_reuse: 1
+  # 2 as of 2026-10-20, for daily publishing. A mix eats 20-30 tracks and
+  # the sources supply ~90/week, so at one-use-per-track a daily video
+  # needs ~175 tracks/week -- roughly double what comes in. Allowing a
+  # track into two different mixes closes that gap without padding the
+  # catalogue with obscure material, which is what paging deeper into the
+  # popularity ranking would have done. mix.py enforces this per mix.
+  max_track_reuse: 2
   kaggle_hours_per_week_cap: 10
   # Real batch (2026-10-15) showed 0.92 was far too aggressive -- the chroma
   # fingerprint mostly encodes key/instrumentation, so different tracks in
@@ -59,6 +68,32 @@ music:
                     # Freesound still needs FREESOUND_API_KEY; Openverse works with no key either way.
     tracks_per_batch: 26
     tags: "lofi chill ambient instrumental"
+    # Daily cadence needs FRESH popular tracks every run, and paging
+    # deeper is not the way to get them: verified live 2026-10-20 that
+    # Jamendo's popularity ranking falls off a cliff -- offset 0 returns
+    # tracks with 400k-900k listens, offset 78 returns 545 and 3,261. The
+    # genuinely popular slice is only ~50 deep per query.
+    #
+    # So rotate the QUERY instead. Each tag has its own popular top-N, so
+    # a different tag set each day keeps pulling from the top of a
+    # different ranking rather than scraping the bottom of one. The run
+    # picks tags_per_run of these based on the date (see
+    # cc_library._rotating_tags), which also stops every run from
+    # re-fetching the same tracks for dedupe to throw away.
+    tag_pool:
+      - lofi
+      - chillhop
+      - ambient
+      - instrumental
+      - chill
+      - jazz
+      - piano
+      - study
+      - sleep
+      - relaxing
+      - downtempo
+      - beats
+    tags_per_run: 4
     bass_boost_db: 6.0
     # Fraction of each batch turned into mashups (two tracks blended)
     # instead of plain bass-boosts. Only same-key / close-BPM pairs are
