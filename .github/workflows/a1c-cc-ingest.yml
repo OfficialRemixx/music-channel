@@ -25,7 +25,13 @@ concurrency:
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 15 was too tight once tracks got longer: a real run was cancelled
+    # mid-ingest at exactly 15m. The per-batch cap and the tighter source
+    # duration ceiling should bring this well under 10m again, but the
+    # job downloads and re-encodes ~26 tracks over the public internet,
+    # so leave real headroom rather than losing an entire run to a slow
+    # upstream.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0

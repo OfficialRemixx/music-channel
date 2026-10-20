@@ -32,11 +32,14 @@ log = get_logger(__name__)
 _DURATION_MARGIN_S = 5.0
 MIN_SOURCE_DURATION_S = _QC_MIN_DURATION_S + _DURATION_MARGIN_S
 
-# No upper margin needed: cc_library.py trims every track to
-# MAX_TRACK_DURATION_S (under qc.py's ceiling) before QC sees it, so a
-# long track is fine. This bound only rejects absurd outliers (hour-long
-# field recordings) that aren't worth downloading to then cut to ~3 min.
-MAX_SOURCE_DURATION_S = _QC_MAX_DURATION_S * 4
+# cc_library.py trims every track to MAX_TRACK_DURATION_S (under qc.py's
+# ceiling) before QC sees it, so there is no point fetching a much longer
+# file: the extra minutes are downloaded and decoded only to be thrown
+# away. This was set to 4x qc's ceiling (12-minute tracks) and a live run
+# spent >14 minutes on download+decode+bass-boost and got killed by the
+# workflow timeout. 1.5x leaves room to pick a track without paying for
+# audio that gets cut.
+MAX_SOURCE_DURATION_S = _QC_MAX_DURATION_S * 1.5
 
 ALLOWED_LICENSES = {"CC0", "CC-BY", "public-domain"}
 FORBIDDEN_LICENSE_MARKERS = ("NC", "SA", "ND")  # reject if any appear in a license string

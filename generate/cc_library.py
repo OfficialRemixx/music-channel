@@ -117,22 +117,46 @@ def _jamendo_candidates(cfg: dict, limit: int) -> list[dict]:
 def _all_candidates(cfg: dict, limit: int) -> list[dict]:
     """Gathers candidates from every source, oversampling each so that
     even if one or two sources are unconfigured/failing, the batch can
-    still reach `limit`. Each source function already never raises."""
+    still reach `limit`. Each source function already never raises.
+
+    Returns AT MOST `limit` candidates, round-robin across the sources
+    that returned anything. Both parts matter:
+
+    - The cap: each source is asked for a full batch's worth so that one
+      working source can carry the run alone, but every candidate past
+      the cap is a wasted download+decode+bass-boost. Without it, two
+      working sources produced 52 candidates for a 26-track batch and
+      the job ran past the workflow's timeout and was cancelled mid-run.
+    - Round-robin: truncating a concatenated list would fill the whole
+      batch from whichever source happens to be first (Jamendo), so the
+      other sources would only ever contribute when Jamendo came up
+      short -- which defeats the point of having several sources.
+    """
     per_source_limit = max(limit, 8)
     sources = (_jamendo_candidates, _freesound_candidates, _openverse_candidates)
-    all_candidates: list[dict] = []
+    per_source: list[list[dict]] = []
     for source_fn in sources:
         try:
             found = source_fn(cfg, per_source_limit)
         except Exception:
             log.exception("cc_library._all_candidates: %s raised unexpectedly", source_fn.__module__)
             found = []
-        all_candidates.extend(found)
+        per_source.append(found)
+
+    interleaved: list[dict] = []
+    for i in range(max((len(f) for f in per_source), default=0)):
+        for found in per_source:
+            if i < len(found):
+                interleaved.append(found[i])
+    selected = interleaved[:limit]
+
     log.info(
-        "cc_library._all_candidates: %d total candidates across %d sources",
-        len(all_candidates), len(sources),
+        "cc_library._all_candidates: %d found across %d sources, taking %d for this batch (%s)",
+        len(interleaved), len(sources), len(selected),
+        ", ".join(f"{fn.__module__.rsplit('.', 1)[-1]}={len(found)}"
+                  for fn, found in zip(sources, per_source, strict=True)),
     )
-    return all_candidates
+    return selected
 
 
 class CCLibraryProvider(MusicProvider):
