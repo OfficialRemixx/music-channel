@@ -6,7 +6,12 @@ fix logged nothing, which means the env-derived ref already matched, so
 the ref is NOT the problem. Find out what the CLI actually sees.
 """
 from __future__ import annotations
-import os, subprocess, sys, tempfile
+
+import os
+import subprocess
+import sys
+import tempfile
+
 
 def run(label, cmd):
     print(f"\n=== {label} ===\n$ {' '.join(cmd)}")
