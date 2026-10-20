@@ -33,6 +33,14 @@ jobs:
       - run: pip install -r requirements.txt
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - env:
+          # b_build.py reads every track's audio back out of the private
+          # Kaggle Dataset (storage.resolve_track_path), so it needs the
+          # same Kaggle credentials A2/A1c use. These were missing: this
+          # workflow still had the env list from when audio lived in git,
+          # and the first real B run died instantly on
+          # "KAGGLE_USERNAME is not set" before building anything.
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
           YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
