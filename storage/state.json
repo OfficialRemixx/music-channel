@@ -2,7 +2,18 @@
   "circuit_breaker_paused": false,
   "kaggle_dataset_created": true,
   "last_run": {},
-  "pending_generation_jobs": [],
+  "pending_generation_jobs": [
+    {
+      "batch_id": "deep_focus-fed69921",
+      "job_id": "officialremixx/mc-gen-deep-focus-fed69921",
+      "meta": {
+        "batch_id": "deep_focus-fed69921",
+        "slug": "mc-gen-deep-focus-fed69921"
+      },
+      "provider": "kaggle_acestep",
+      "status": "pending"
+    }
+  ],
   "quota_usage": {},
   "schema_version": 1,
   "track_pool": [
