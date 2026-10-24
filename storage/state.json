@@ -2502,6 +2502,37 @@
       "source_url": "https://freesound.org/people/Andrewkn/sounds/404458/",
       "track_id": "cc-deep_focus-673faef1-022",
       "used_count": 0
+    },
+    {
+      "attribution": "\"Sailors Having Fun (FX)\" by ChristmasKrumble666, CC0 (http://creativecommons.org/publicdomain/zero/1.0/), remixed (bass-boosted), via freesound. Source: https://freesound.org/people/ChristmasKrumble666/sounds/690997/",
+      "bpm": 63.2,
+      "fingerprint": [
+        0.0433643908662572,
+        0.07563608712820692,
+        0.055573901593938164,
+        0.10270366530790705,
+        0.03600703155928056,
+        0.13720191997668585,
+        0.17094223093234487,
+        0.07623230439154063,
+        0.08591421221656972,
+        0.05064316039306008,
+        0.10799885148598051,
+        0.057782244148228405
+      ],
+      "key": "D# minor",
+      "license": "CC0",
+      "license_url": "http://creativecommons.org/publicdomain/zero/1.0/",
+      "loudness_dbfs": -18.71,
+      "model": "cc_library/freesound+bass-boosted",
+      "path": "cc-deep_focus-0ad2362d-022.wav",
+      "popularity": 1062,
+      "popularity_unit": "downloads",
+      "prompt": "ChristmasKrumble666 - Sailors Having Fun (FX) (bass-boosted, via freesound)",
+      "score": 0.9305,
+      "source_url": "https://freesound.org/people/ChristmasKrumble666/sounds/690997/",
+      "track_id": "cc-deep_focus-0ad2362d-022",
+      "used_count": 0
     }
   ],
   "uploaded_videos": [],
