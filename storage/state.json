@@ -8,10 +8,11 @@
       "job_id": "officialremixx/mc-gen-deep-focus-61c972f5",
       "meta": {
         "batch_id": "deep_focus-61c972f5",
+        "last_status_text": "officialremixx/mc-gen-deep-focus-61c972f5 has status \"kernelworkerstatus.running\"",
         "slug": "mc-gen-deep-focus-61c972f5"
       },
       "provider": "kaggle_acestep",
-      "status": "pending"
+      "status": "running"
     }
   ],
   "quota_usage": {},
