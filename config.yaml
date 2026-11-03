@@ -1,4 +1,9 @@
-pipeline_enabled: true
+# STOPPED 2026-11-03 at the owner's request ("ise stop krna hai abhi").
+# Every entrypoint checks this first (common.config.is_enabled) and exits
+# before doing anything, so nothing generates, mixes, uploads or
+# publishes while it is false. The workflow crons still fire and the jobs
+# still start -- they just exit immediately. Set back to true to resume.
+pipeline_enabled: false
 budget_mode: free
 dry_run: false   # flipped on 2026-10-14: real Kaggle generation + real private YouTube uploads now live
 
