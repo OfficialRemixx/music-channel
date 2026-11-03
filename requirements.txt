@@ -6,5 +6,11 @@ requests>=2.31
 Pillow>=10.0
 pydub>=0.25
 numpy>=1.26
-kaggle>=1.8.0
+# Pinned 2026-11-03. Unpinned, pip kept installing the newest release and
+# one of them crashes on import ("from kaggle.api.kaggle_api_ext" in
+# kaggle/__init__.py), which broke every B run for two weeks -- the CLI
+# could not even start, so no audio could be read and no mix built.
+# 2.2.4 is the version last seen working here: datasets list/status/files
+# and single-file download all returned rc 0 on 2026-10-20.
+kaggle==2.2.4
 pytest>=8.0

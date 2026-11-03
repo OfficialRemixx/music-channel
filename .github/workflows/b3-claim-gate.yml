@@ -4,14 +4,16 @@
 name: B3 claim-gate
 on:
   workflow_dispatch: {}
-  schedule:
+  # schedule:
     # Enabled 2026-10-20 together with B's cron. Now that videos publish
     # without a human looking at them first, this is the thing standing
     # between a copyright claim and a public upload: it re-checks each
     # uploaded video and cancels its scheduled publish if YouTube reports
     # a claim or rejection. Every 4h comfortably beats the gap between a
     # B run (10:00 UTC) and its publish slot (13:00 UTC).
-    - cron: "0 */4 * * *"
+  # PAUSED 2026-11-03 (owner asked to close the setup). Uncomment to
+  # resume; config.yaml's pipeline_enabled must go back to true too.
+  # - cron: "0 */4 * * *"
 permissions:
   contents: write
 concurrency:

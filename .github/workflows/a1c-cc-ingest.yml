@@ -12,8 +12,10 @@ name: A1c cc-library ingest
 
 on:
   workflow_dispatch: {}
-  schedule:
-    - cron: "0 5 * * *"   # daily, well before B's 10:00 UTC build
+  # schedule:
+  # PAUSED 2026-11-03 (owner asked to close the setup). Uncomment to
+  # resume; config.yaml's pipeline_enabled must go back to true too.
+  # - cron: "0 5 * * *"   # daily, well before B's 10:00 UTC build
 
 permissions:
   contents: write

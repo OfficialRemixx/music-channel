@@ -5,8 +5,10 @@ name: A2 collect
 
 on:
   workflow_dispatch: {}
-  schedule:
-    - cron: "*/30 * * * *"
+  # schedule:
+  # PAUSED 2026-11-03 (owner asked to close the setup). Uncomment to
+  # resume; config.yaml's pipeline_enabled must go back to true too.
+  # - cron: "*/30 * * * *"
 
 permissions:
   contents: write

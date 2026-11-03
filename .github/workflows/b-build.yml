@@ -20,8 +20,10 @@ name: B build
 
 on:
   workflow_dispatch: {}
-  schedule:
-    - cron: "0 10 * * *"   # daily; publishes at the 13:00 UTC slot (18:30 IST)
+  # schedule:
+  # PAUSED 2026-11-03 (owner asked to close the setup). Uncomment to
+  # resume; config.yaml's pipeline_enabled must go back to true too.
+  # - cron: "0 10 * * *"   # daily; publishes at the 13:00 UTC slot (18:30 IST)
 
 permissions:
   contents: write
